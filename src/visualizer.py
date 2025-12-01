@@ -1,137 +1,167 @@
+import pygame
+import numpy as np
 from typing import List
 
-import pygame.sprite
 
-from environment import Thing, Dust
-
-# from environment import DustCleanUp as dc
-
-WALKABLE_COLOR = pygame.Color("white")
-IMPASSABLE_COLOR = pygame.Color("black")
-AGENT_COLOR = pygame.Color("yellow")
-DUST_COLOR = pygame.Color("gray")
-DISPLAY_COLOR = pygame.Color("white")
-START_COLOR = pygame.Color("green")
-GOAL_COLOR = pygame.Color("red")
-
-CELL_WIDTH = 100
-CELL_HEIGHT = 100
-
-
-def make_tile(width: int, height: int, tile_color: pygame.Color) -> pygame.Surface:
-    """
-    Creates a simple tile that can be drawn onto the display.
-
-    :param width: Width of the tile in pixels.
-    :param height: Height of the tile in pixels.
-    :param tile_color: Color to file the tile with.
-    :return: Surface that represents the tile.
-    """
-    image = pygame.Surface([width, height])
-    pygame.draw.rect(image, tile_color, pygame.Rect(0, 0, width, height))
-    pygame.draw.rect(image, pygame.Color("black"), pygame.Rect(0, 0, width, height), width=1)
-    return image
-
-
-def make_entity(width: int, height: int, tile_color: pygame.Color, entity_color: pygame.Color) -> pygame.Surface:
-    """
-    Makes a tile with a circle on it to represent an entity like a piece of dust or agent.
-
-    :param width:
-    :param height:
-    :param agent_color:
-    :return:
-    """
-    image = make_tile(width, height, tile_color)
-    image.set_colorkey(tile_color)
-
-    rect = image.get_rect()
-    cx = rect.width/2
-    cy = rect.height/2
-    pygame.draw.circle(image, entity_color, (cx,cy), (rect.width/2) * .5, 0)
-    return image
-
-
-class MazeVisualizer:
-    """
-    Class for visualizing a maze navigation task.
-
-    The two main functions in this class are display_state() and run_actions().
-    display_state() allows you to pass in a state one at a time and display it.
-    This is usually for dynamic environments where you only know the agents
-    next action. run_actions() allows you to run a series of actions. This is
-    useful for static environments like those in a search since you have all
-    the moves before the agent even starts.
-    """
-    def __init__(self, width:int, height: int, cols:int, rows: int):
+class GameVisualizer:
+    
+    SCREEN_WIDTH = 1000
+    
+    def __init__(self, grid_size: int, window_width: int = None, window_height: int = None):
         """
         Initializes the visualizer.
-
-        When this class is made, pygame is initialized and the display is set.
-        :param width: Width of the display window.
-        :param height: Height of the display window.
+        
+        :param grid_size: Size of the grid (grid_size x grid_size)
+        :param window_width: Ignored - uses fixed SCREEN_WIDTH instead
+        :param window_height: Ignored - uses fixed SCREEN_HEIGHT instead
         """
-
         pygame.init()
         self.clock = pygame.time.Clock()
-
-        self.cols = cols
-        self.rows = rows
-        self.win = pygame.display.set_mode([width, height])
-        self.cell_width = self.win.get_width()//cols
-        self.cell_height = self.win.get_height()//rows
-        pygame.display.set_caption("Maze Visualizer")
-
+        
+        self.grid_size = grid_size
+        # Use fixed screen dimensions
+        self.win = pygame.display.set_mode([self.SCREEN_WIDTH, self.SCREEN_WIDTH])
+        # Scale cell sizes based on fixed screen width and grid size
+        self.cell_width = self.SCREEN_WIDTH // grid_size
+        self.cell_height = self.SCREEN_WIDTH // grid_size
+        
+        # Colors
+        self.ALIVE_COLOR = pygame.Color("yellow")
+        self.DEAD_COLOR = pygame.Color("white")
+        self.GRID_COLOR = pygame.Color("gray")
+        
+        pygame.display.set_caption("Conway's Game of Life")
+    
+    def display_grid(self, grid: np.ndarray, center_row: int = None, center_col: int = None):
+        """
+        Displays a single grid state.
+        
+        :param grid: 2D numpy array where 1 = alive, 0 = dead
+        :param center_row: Row to center the view on (if grid is larger than display)
+        :param center_col: Column to center the view on (if grid is larger than display)
+        """
+        # Fill background
+        self.win.fill(self.DEAD_COLOR)
+        
+        # Determine viewport if grid is larger than display
+        if grid.shape[0] > self.grid_size or grid.shape[1] > self.grid_size:
+            if center_row is None:
+                center_row = grid.shape[0] // 2
+            if center_col is None:
+                center_col = grid.shape[1] // 2
+            
+            # Calculate viewport bounds
+            start_row = max(0, center_row - self.grid_size // 2)
+            end_row = min(grid.shape[0], start_row + self.grid_size)
+            start_col = max(0, center_col - self.grid_size // 2)
+            end_col = min(grid.shape[1], start_col + self.grid_size)
+            
+            # Adjust if we hit boundaries
+            if end_row - start_row < self.grid_size:
+                start_row = max(0, end_row - self.grid_size)
+            if end_col - start_col < self.grid_size:
+                start_col = max(0, end_col - self.grid_size)
+        else:
+            # Grid fits in display, show it all
+            start_row = 0
+            end_row = grid.shape[0]
+            start_col = 0
+            end_col = grid.shape[1]
+        
+        # Draw cells
+        display_rows = min(self.grid_size, end_row - start_row)
+        display_cols = min(self.grid_size, end_col - start_col)
+        
+        for i in range(display_rows):
+            for j in range(display_cols):
+                grid_row = start_row + i
+                grid_col = start_col + j
+                
+                if grid_row < grid.shape[0] and grid_col < grid.shape[1] and grid[grid_row, grid_col] == 1:
+                    x = j * self.cell_width
+                    y = i * self.cell_height
+                    pygame.draw.rect(
+                        self.win,
+                        self.ALIVE_COLOR,
+                        pygame.Rect(x, y, self.cell_width, self.cell_height)
+                    )
+        
+        # Draw grid lines
+        for i in range(display_rows + 1):
+            y = i * self.cell_height
+            pygame.draw.line(
+                self.win,
+                self.GRID_COLOR,
+                (0, y),
+                (self.win.get_width(), y)
+            )
+        for j in range(display_cols + 1):
+            x = j * self.cell_width
+            pygame.draw.line(
+                self.win,
+                self.GRID_COLOR,
+                (x, 0),
+                (x, self.win.get_height())
+            )
+    
+    def display_sequence(self, grids: List[np.ndarray], delay_ms: int = 100, auto_advance: bool = True):
+        """
+        Displays a sequence of grids (e.g., from simulate() log).
+        
+        :param grids: List of 2D numpy arrays representing grid states
+        :param delay_ms: Delay between frames in milliseconds
+        :param auto_advance: If True, automatically advances frames. If False, waits for keypress.
+        """
+        running = True
+        frame_index = 0
+        
+        while running and frame_index < len(grids):
+            # Handle events
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif event.key == pygame.K_SPACE:
+                        # Pause/unpause
+                        auto_advance = not auto_advance
+                    elif event.key == pygame.K_RIGHT:
+                        # Next frame
+                        frame_index = min(frame_index + 1, len(grids) - 1)
+                    elif event.key == pygame.K_LEFT:
+                        # Previous frame
+                        frame_index = max(frame_index - 1, 0)
+            
+            # Display current frame
+            self.display_grid(grids[frame_index])
+            self.update_display()
+            
+            # Auto-advance if enabled
+            if auto_advance:
+                frame_index += 1
+                pygame.time.delay(delay_ms)
+    
+    def update_display(self, fps: int = 60):
+        """
+        Updates the display and handles timing.
+        
+        :param fps: Target frames per second
+        """
+        pygame.display.flip()
+        self.clock.tick(fps)
+    
     def get_event(self):
+        """
+        Gets pygame events. Returns "exit" if user wants to quit.
+        """
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print("exiting")
                 return "exit"
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
+                if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                     return "exit"
-
-    def display_maze(self, things:list[Thing], location:list[(int,int)] = None):
-        self.draw_grid()
-
-        if location is None:
-            location = [t.location for t in things]
-
-        for i, thing in enumerate(things):
-            upper_left = (location[i][0] * self.cell_width,
-                          location[i][1] * self.cell_height)
-            center = (upper_left[0]+self.cell_width//2, upper_left[1]+self.cell_height//2)
-
-            c = pygame.Color(thing.color)
-            if thing.shape == "circle":
-                # if type(thing) == Dust:
-                #     print(f"Drawing dust at {center}")
-                pygame.draw.circle(self.win, c, center, thing.d1 * (self.cell_width + self.cell_height)//4)
-            else: #if thing.shape == "rectangle":
-                r = pygame.Rect(0, 0, self.cell_width * thing.d1, self.cell_height * thing.d1)
-                r.center = center
-                pygame.draw.rect(self.win, c, r)
-
-    def quit(self) -> None:
-        """
-        Simple method that will allow quitting of pygame from outside of this class.
-        """
-        print(f"Closing visualizer.")
+        return None
+    
+    def quit(self):
         pygame.quit()
-
-    def update_display(self, delay: int = 0):
-        pygame.display.flip()
-        self.clock.tick(60)
-        pygame.time.delay(delay)
-
-    def draw_grid(self):
-        self.win.fill(pygame.Color("white"))
-
-        for j in range(self.cols):
-            pygame.draw.line(self.win, pygame.Color("black"),
-                             (j * self.cell_width, 0), (j * self.cell_width, self.win.get_height()))
-        for i in range(self.rows):
-            pygame.draw.line(self.win, pygame.Color("black"),
-                             (0, i * self.cell_height), (self.win.get_width(), i * self.cell_height))
-
-

@@ -4,6 +4,7 @@ from typing import Generic, TypeVar, Callable
 from abc import ABC, abstractmethod
 import numpy as np
 import copy
+from scipy.signal import convolve2d
 
 
 
@@ -57,103 +58,55 @@ class CGOL_Problem(Problem[T]):
         include_between: bool=INCLUDE_BETWEEN,
         expansion: int=EXPANSION
     ) -> list[np.ndarray]:
-        """
-        Simulates Conway's Game of Life efficiently.
-        
-        Args:
-            initial: 1D array representing the initial grid (will be reshaped to square)
-            steps: Number of generations to simulate
-            include_between: Whether to include intermediate states in the log
-            size: Maximum grid size. If -1, allows infinite expansion from original grid.
-                  Otherwise, only expands outwards as much as grid specifies.
-        
-        Returns:
-            List of grid states (or just final state if include_between is False)
-        """
         log = []
         
-        # s is dimension of the intial grid
+        # Dimension of the intial grid
         s = int(len(initial) ** 0.5)
 
-        size = s + steps if expansion == -1 else s + expansion
-
-        
+        # How far we can expand the grid
+        size = s + (steps//2) + 1 if expansion == -1 else s + expansion
         M = np.zeros((size, size), dtype=initial.dtype)
+
         # (middle - half, middle + half) is where the initial grid goes in the new one
         middle = size // 2
         half = s // 2
-        
-        bounds = (middle - half, middle + half + (s%2))
 
+        # Plop initial state in center of new grid
+        bounds = (middle - half, middle + half + (s%2))
         M[bounds[0]:bounds[1], bounds[0]:bounds[1]] = initial.reshape((s, s))
 
         if include_between:
             log.append(M.copy())
         
+        # Kernel for counting neighbors (8 neighbors around each cell)
+        kernel = np.array([[1, 1, 1],
+                           [1, 0, 1],
+                           [1, 1, 1]], dtype=np.uint8)
+        
         for _ in range(steps):
-
-            else:
-                # For fixed size, ensure bounds don't exceed grid limits
-                min_r, max_r, min_c, max_c = bounds
-                bounds = (max(0, min_r), min(M.shape[0], max_r),
-                         max(0, min_c), min(M.shape[1], max_c))
+            # Find bounding box of living cells for speed
+            living = np.where(M == 1)
+            if len(living[0]) == 0:
+                # Everyone died and your model is bad :(
+                break
             
-            # Extract region of interest with padding for neighbor counting
-            min_r, max_r, min_c, max_c = bounds
-            # Expand bounds by 1 for neighbor counting
-            pad_min_r = max(0, min_r - 1)
-            pad_max_r = min(M.shape[0], max_r + 1)
-            pad_min_c = max(0, min_c - 1)
-            pad_max_c = min(M.shape[1], max_c + 1)
+            # Calculate bounds with 1 cell padding (2 is because [) indexing)
+            min_r = max(0, living[0].min() - 1)
+            max_r = min(M.shape[0], living[0].max() + 2)
+            min_c = max(0, living[1].min() - 1)
+            max_c = min(M.shape[1], living[1].max() + 2)            
             
-            padded_region = M[pad_min_r:pad_max_r, pad_min_c:pad_max_c]
             region = M[min_r:max_r, min_c:max_c]
             
-            # Count neighbors efficiently using numpy operations
-            # Sum all 8 neighbors by shifting and summing
-            neighbors = np.zeros(region.shape, dtype=np.uint8)
+            # pad with zeroes but return same dimensions
+            neighbors = convolve2d(region, kernel, mode='same', boundary='fill', fillvalue=0)
             
-            # Calculate relative offsets within padded region
-            r_rel = min_r - pad_min_r
-            c_rel = min_c - pad_min_c
+            # Rules, John
+            new_region = ((region == 1) & ((neighbors == 2) | (neighbors == 3))) | ((region == 0) & (neighbors == 3))
+            new_region = new_region.astype(initial.dtype)
             
-            # Count neighbors by summing all 8 shifted views
-            for dr in [-1, 0, 1]:
-                for dc in [-1, 0, 1]:
-                    if dr == 0 and dc == 0:
-                        continue
-                    r1 = r_rel + dr
-                    r2 = r_rel + dr + region.shape[0]
-                    c1 = c_rel + dc
-                    c2 = c_rel + dc + region.shape[1]
-                    
-                    # Only add if the slice is valid
-                    if r1 >= 0 and r2 <= padded_region.shape[0] and \
-                       c1 >= 0 and c2 <= padded_region.shape[1]:
-                        neighbors += padded_region[r1:r2, c1:c2]
-            
-            # Apply Game of Life rules
-            new_region = np.zeros_like(region)
-            # Live cells with 2-3 neighbors survive
-            new_region[(region == 1) & ((neighbors == 2) | (neighbors == 3))] = 1
-            # Dead cells with exactly 3 neighbors become alive
-            new_region[(region == 0) & (neighbors == 3)] = 1
-            
-            # Update grid
+            # Update M with the new region
             M[min_r:max_r, min_c:max_c] = new_region
-            
-            # Update bounds to include new active cells (with 1-cell padding)
-            # Find the bounding box of live cells
-            live_cells = np.where(new_region == 1)
-            if len(live_cells[0]) > 0:
-                new_min_r = max(0, min_r + live_cells[0].min() - 1)
-                new_max_r = min(M.shape[0], min_r + live_cells[0].max() + 2)
-                new_min_c = max(0, min_c + live_cells[1].min() - 1)
-                new_max_c = min(M.shape[1], min_c + live_cells[1].max() + 2)
-                bounds = (new_min_r, new_max_r, new_min_c, new_max_c)
-            else:
-                # All cells dead, simulation can stop early
-                break
             
             if include_between:
                 log.append(M.copy())

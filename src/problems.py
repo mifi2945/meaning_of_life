@@ -3,140 +3,18 @@ from random import randint, random, choice, choices
 from typing import Generic, TypeVar, Callable
 from abc import ABC, abstractmethod
 import numpy as np
+import copy
+
+
+
+
+STEPS = 10_000
+INCLUDE_BETWEEN = True
+EXPANSION = -1
 
 
 # makes the state both immutable and hashable
 T = TypeVar("T", bound=tuple)
-
-class Node:
-    """
-    Represents a node in a search tree that contains a state.
-
-    Attributes:
-        count (int): Class-level counter tracking created nodes.
-        state (T): Current state of the problem.
-        parent (Node | None): Parent node containing the prior state.
-        action (str | None): Action taken to reach this state from the parent.
-        path_cost (float): Cumulative cost of reaching this node.
-        id (int): Unique identifier for the node instance.
-        depth (int): Depth of the node in the search tree.
-    """
-    count: int = 0
-    """Class-level counter tracking created nodes."""
-
-    def __init__(self, state: T, parent: Node = None, action: str = None, path_cost: float = 0):
-        """
-        Initializes a Node.
-
-        Args:
-            state (T): Current state.
-            parent (Node | None): Parent node. Defaults to None.
-            action (str | None): Action taken from the parent. Defaults to None.
-            path_cost (float): Path cost from the parent. Defaults to 0.
-        """
-        self.state:T = state
-        self.parent:Node = parent
-        self.action:str = action
-        self.path_cost:float = path_cost
-        self.id:int = Node.count
-        if self.parent is None:
-            self.depth:int = 0
-        else:
-            self.depth:int = self.parent.depth + 1
-        Node.count += 1
-
-    def __str__(self) -> str:
-        """String representation of the node"""
-        ret = "ID: " + str(self.id) + "\n"
-        ret += "State: \n" + str(self.state) + "\n"
-        ret += "ParentID: " + ("None" if self.parent is None else str(self.parent.id)) + "\n"
-        ret += "Action: " + str(self.action) + "\n"
-        ret += "Cost: " + str(self.path_cost) + "\n"
-        ret += "Depth: " + str(self.depth) + "\n"
-        return ret
-
-    def __repr__(self): return '<{}>'.format(self.state)
-
-    def __hash__(self):
-        """Stubbing this out so if you try to use it, it will throw an error."""
-        raise NotImplementedError
-
-    def __eq__(self, other):
-        """Stubbing this out so if you try to use it, it will throw an error."""
-        raise NotImplementedError
-
-    def __copy__(self):
-        """Stubbing this out so if you try to use it, it will throw an error."""
-        raise NotImplementedError
-
-    @staticmethod
-    def path_actions(node: Node) -> list[str]:
-        """
-        Returns the sequence of actions from the root to a node.
-
-        Args:
-            node (Node): Target node.
-
-        Returns:
-            list[str]: Actions leading to the node.
-        """
-
-        root = node
-        p = []
-
-        while root is not None:
-            p.append(root.action)
-            root = root.parent
-
-        # removes the last action which is just None
-        p.pop()
-        p.reverse()
-        return p
-
-    @staticmethod
-    def expand(node: Node, problem: Problem) -> list[Node]:
-        """
-        Expands a node into nodes with neighboring states.
-
-        Args:
-            node (Node): Current node.
-            problem (Problem): Search problem.
-
-        Returns:
-            list[Node]: Nodes containing neighboring states.
-        """
-        curr_state = node.state
-        ret = []
-        for a in problem.actions(curr_state):
-            next_state = problem.result(curr_state, a)
-            cost = problem.action_cost(curr_state, a, next_state)
-            ret.append(Node(next_state, node, a, node.path_cost + cost))
-        return ret
-
-    @staticmethod
-    def is_cycle(node: Node, k: int = 30) -> bool:
-        """
-        Checks if the node forms a cycle within k ancestors.
-
-        Args:
-            node (Node): Node to check.
-            k (int): Max number of ancestors. Defaults to 30.
-
-        Returns:
-            bool: True if a cycle exists, False otherwise.
-        """
-        def find_cycle(ancestor:Node, _k:int) -> bool:
-            if ancestor is None: # you're at root and done
-                return False
-            elif _k > 0:
-                # seen the current state before
-                if ancestor.state == node.state:
-                    return True
-                else:
-                    return find_cycle(ancestor.parent, _k - 1)
-            else:
-                return False
-        return find_cycle(node.parent, k)
 
 class Problem(ABC, Generic[T]):
     """
@@ -145,69 +23,7 @@ class Problem(ABC, Generic[T]):
     This class defines the operations needed for search algorithms.
     """
 
-    def __init__(self, initial_state: T):
-        """
-        Initializes a problem with an initial state.
 
-        Args:
-            initial_state (T): The starting state of the problem.
-        """
-        self.initial_state = initial_state
-
-    @abstractmethod
-    def actions(self, state: T) -> list[int]:
-        """
-        Returns a list of legal actions available from the given state.
-
-        Args:
-            state (T): Current state.
-
-        Returns:
-            List[str]: List of actions available from the state.
-        """
-        pass
-
-    @abstractmethod
-    def is_goal(self, curr_state: T) -> bool:
-        """
-        Determines whether the given state is a goal state.
-
-        Args:
-            curr_state (T): State to check.
-
-        Returns:
-            bool: True if curr_state is a goal state, False otherwise.
-        """
-        pass
-
-    @abstractmethod
-    def result(self, curr_state: T, action: int) -> T:
-        """
-        Returns the state that results from applying an action to the current state.
-
-        Args:
-            curr_state (T): Current state.
-            action (str): Action to apply.
-
-        Returns:
-            T: The resulting state after applying the action.
-        """
-        pass
-
-    @abstractmethod
-    def action_cost(self, curr_state: T, action: int, next_state: T) -> float:
-        """
-        Returns the cost of transitioning from curr_state to next_state via the given action.
-
-        Args:
-            curr_state (T): Current state.
-            action (str): Action applied.
-            next_state (T): Resulting state after applying the action.
-
-        Returns:
-            float: Cost associated with the transition.
-        """
-        pass
 
     @abstractmethod
     def value(self, curr_state: T) -> float:
@@ -222,21 +38,7 @@ class Problem(ABC, Generic[T]):
         """
         pass
 
-    def verify(self, actions: np.array[int]) -> bool:
-        """
-        Verifies that a sequence of actions leads from the initial state to a goal state.
 
-        Args:
-            actions (List[int]): Sequence of actions to test.
-
-        Returns:
-            bool: True if the actions reach a goal state, False otherwise.
-        """
-        new_state = self.initial_state
-        for action in actions:
-            new_state = self.result(new_state, action)
-        return self.is_goal(new_state)
-    
 class CGOL_Problem(Problem[T]):
     """
     Version of Problem used for Local Search algorithms Hill Climbing, Genetic Algorithm, and Novelty Search.
@@ -246,6 +48,121 @@ class CGOL_Problem(Problem[T]):
     def __init__(self, state_generator: Callable[[], T]):
         super().__init__(state_generator())
         self.state_generator = state_generator
+
+
+    @staticmethod
+    def simulate(
+        initial: np.ndarray,
+        steps: int=STEPS,
+        include_between: bool=INCLUDE_BETWEEN,
+        expansion: int=EXPANSION
+    ) -> list[np.ndarray]:
+        """
+        Simulates Conway's Game of Life efficiently.
+        
+        Args:
+            initial: 1D array representing the initial grid (will be reshaped to square)
+            steps: Number of generations to simulate
+            include_between: Whether to include intermediate states in the log
+            size: Maximum grid size. If -1, allows infinite expansion from original grid.
+                  Otherwise, only expands outwards as much as grid specifies.
+        
+        Returns:
+            List of grid states (or just final state if include_between is False)
+        """
+        log = []
+        
+        # s is dimension of the intial grid
+        s = int(len(initial) ** 0.5)
+
+        size = s + steps if expansion == -1 else s + expansion
+
+        
+        M = np.zeros((size, size), dtype=initial.dtype)
+        # (middle - half, middle + half) is where the initial grid goes in the new one
+        middle = size // 2
+        half = s // 2
+        
+        bounds = (middle - half, middle + half + (s%2))
+
+        M[bounds[0]:bounds[1], bounds[0]:bounds[1]] = initial.reshape((s, s))
+
+        if include_between:
+            log.append(M.copy())
+        
+        for _ in range(steps):
+
+            else:
+                # For fixed size, ensure bounds don't exceed grid limits
+                min_r, max_r, min_c, max_c = bounds
+                bounds = (max(0, min_r), min(M.shape[0], max_r),
+                         max(0, min_c), min(M.shape[1], max_c))
+            
+            # Extract region of interest with padding for neighbor counting
+            min_r, max_r, min_c, max_c = bounds
+            # Expand bounds by 1 for neighbor counting
+            pad_min_r = max(0, min_r - 1)
+            pad_max_r = min(M.shape[0], max_r + 1)
+            pad_min_c = max(0, min_c - 1)
+            pad_max_c = min(M.shape[1], max_c + 1)
+            
+            padded_region = M[pad_min_r:pad_max_r, pad_min_c:pad_max_c]
+            region = M[min_r:max_r, min_c:max_c]
+            
+            # Count neighbors efficiently using numpy operations
+            # Sum all 8 neighbors by shifting and summing
+            neighbors = np.zeros(region.shape, dtype=np.uint8)
+            
+            # Calculate relative offsets within padded region
+            r_rel = min_r - pad_min_r
+            c_rel = min_c - pad_min_c
+            
+            # Count neighbors by summing all 8 shifted views
+            for dr in [-1, 0, 1]:
+                for dc in [-1, 0, 1]:
+                    if dr == 0 and dc == 0:
+                        continue
+                    r1 = r_rel + dr
+                    r2 = r_rel + dr + region.shape[0]
+                    c1 = c_rel + dc
+                    c2 = c_rel + dc + region.shape[1]
+                    
+                    # Only add if the slice is valid
+                    if r1 >= 0 and r2 <= padded_region.shape[0] and \
+                       c1 >= 0 and c2 <= padded_region.shape[1]:
+                        neighbors += padded_region[r1:r2, c1:c2]
+            
+            # Apply Game of Life rules
+            new_region = np.zeros_like(region)
+            # Live cells with 2-3 neighbors survive
+            new_region[(region == 1) & ((neighbors == 2) | (neighbors == 3))] = 1
+            # Dead cells with exactly 3 neighbors become alive
+            new_region[(region == 0) & (neighbors == 3)] = 1
+            
+            # Update grid
+            M[min_r:max_r, min_c:max_c] = new_region
+            
+            # Update bounds to include new active cells (with 1-cell padding)
+            # Find the bounding box of live cells
+            live_cells = np.where(new_region == 1)
+            if len(live_cells[0]) > 0:
+                new_min_r = max(0, min_r + live_cells[0].min() - 1)
+                new_max_r = min(M.shape[0], min_r + live_cells[0].max() + 2)
+                new_min_c = max(0, min_c + live_cells[1].min() - 1)
+                new_max_c = min(M.shape[1], min_c + live_cells[1].max() + 2)
+                bounds = (new_min_r, new_max_r, new_min_c, new_max_c)
+            else:
+                # All cells dead, simulation can stop early
+                break
+            
+            if include_between:
+                log.append(M.copy())
+        
+        if not include_between:
+            log.append(M.copy())
+        
+        return log
+
 
     def actions(self, curr_state: np.array[int,...]) -> list[int]:
         """
@@ -360,3 +277,16 @@ class CGOL_Problem(Problem[T]):
         """
         c = randint(1,len(parent1)-1)
         return parent1[0:c] + parent2[c:]
+
+
+class GrowthProblem(CGOL_Problem[T]):
+    def objective(self, curr_state: np.array[int,...]) -> float:
+        # TODO take end state and do mathy maths to get how many cells are alive (very complex calculations)
+        pass
+
+
+class MigrationProblem(CGOL_Problem[T]):
+    def objective(self, curr_state: np.array[int,...]) -> float:
+        # TODO take end state and do mathy maths to get how far the pop migrated
+        pass
+

@@ -1,76 +1,54 @@
 import pygame
 import numpy as np
 from typing import List
+import random
 
+DELAY = 100
+GRID_SIZE_PIXELS = 1000
+GRID_WIDTH = 100
 
 class GameVisualizer:
-    
-    SCREEN_WIDTH = 1000
-    
-    def __init__(self, grid_size: int, window_width: int = None, window_height: int = None):
-        """
-        Initializes the visualizer.
-        
-        :param grid_size: Size of the grid (grid_size x grid_size)
-        :param window_width: Ignored - uses fixed SCREEN_WIDTH instead
-        :param window_height: Ignored - uses fixed SCREEN_HEIGHT instead
-        """
+    def __init__(self, grid_width: int = None, delay: int = DELAY, auto_fit: bool = True):
         pygame.init()
         self.clock = pygame.time.Clock()
         
-        self.grid_size = grid_size
-        # Use fixed screen dimensions
-        self.win = pygame.display.set_mode([self.SCREEN_WIDTH, self.SCREEN_WIDTH])
-        # Scale cell sizes based on fixed screen width and grid size
-        self.cell_width = self.SCREEN_WIDTH // grid_size
-        self.cell_height = self.SCREEN_WIDTH // grid_size
+        self.grid_width = grid_width
+        self.delay = delay
+        self.auto_fit = auto_fit
+        self.win = pygame.display.set_mode([GRID_SIZE_PIXELS, GRID_SIZE_PIXELS])
+        self.cell_width = GRID_SIZE_PIXELS // grid_width
         
-        # Colors
-        self.ALIVE_COLOR = pygame.Color("yellow")
+
+        self.ALIVE_COLOR = pygame.Color(*self._random_contrasty_color())
         self.DEAD_COLOR = pygame.Color("white")
         self.GRID_COLOR = pygame.Color("gray")
+
         
         pygame.display.set_caption("Conway's Game of Life")
+
+    def _random_contrasty_color(self):
+        while True:
+            r = random.randint(0, 255)
+            g = random.randint(0, 255)
+            b = random.randint(0, 255)
+            luminance = 0.299 * r + 0.587 * g + 0.114 * b
+            if luminance < 220:
+                return (r, g, b)
+    
+    def _fit_to_grid(self, width: int):        
+        self.grid_width = min(width, GRID_WIDTH)
+        self.cell_width = GRID_SIZE_PIXELS // self.grid_width
     
     def display_grid(self, grid: np.ndarray, center_row: int = None, center_col: int = None):
-        """
-        Displays a single grid state.
-        
-        :param grid: 2D numpy array where 1 = alive, 0 = dead
-        :param center_row: Row to center the view on (if grid is larger than display)
-        :param center_col: Column to center the view on (if grid is larger than display)
-        """
-        # Fill background
         self.win.fill(self.DEAD_COLOR)
         
-        # Determine viewport if grid is larger than display
-        if grid.shape[0] > self.grid_size or grid.shape[1] > self.grid_size:
-            if center_row is None:
-                center_row = grid.shape[0] // 2
-            if center_col is None:
-                center_col = grid.shape[1] // 2
-            
-            # Calculate viewport bounds
-            start_row = max(0, center_row - self.grid_size // 2)
-            end_row = min(grid.shape[0], start_row + self.grid_size)
-            start_col = max(0, center_col - self.grid_size // 2)
-            end_col = min(grid.shape[1], start_col + self.grid_size)
-            
-            # Adjust if we hit boundaries
-            if end_row - start_row < self.grid_size:
-                start_row = max(0, end_row - self.grid_size)
-            if end_col - start_col < self.grid_size:
-                start_col = max(0, end_col - self.grid_size)
-        else:
-            # Grid fits in display, show it all
-            start_row = 0
-            end_row = grid.shape[0]
-            start_col = 0
-            end_col = grid.shape[1]
-        
-        # Draw cells
-        display_rows = min(self.grid_size, end_row - start_row)
-        display_cols = min(self.grid_size, end_col - start_col)
+        start_row = 0
+        end_row = grid.shape[0]
+        start_col = 0
+        end_col = grid.shape[1]
+    
+        display_rows = end_row - start_row
+        display_cols = end_col - start_col
         
         for i in range(display_rows):
             for j in range(display_cols):
@@ -79,16 +57,16 @@ class GameVisualizer:
                 
                 if grid_row < grid.shape[0] and grid_col < grid.shape[1] and grid[grid_row, grid_col] == 1:
                     x = j * self.cell_width
-                    y = i * self.cell_height
+                    y = i * self.cell_width
                     pygame.draw.rect(
                         self.win,
                         self.ALIVE_COLOR,
-                        pygame.Rect(x, y, self.cell_width, self.cell_height)
+                        pygame.Rect(x, y, self.cell_width, self.cell_width)
                     )
         
         # Draw grid lines
         for i in range(display_rows + 1):
-            y = i * self.cell_height
+            y = i * self.cell_width
             pygame.draw.line(
                 self.win,
                 self.GRID_COLOR,
@@ -104,14 +82,9 @@ class GameVisualizer:
                 (x, self.win.get_height())
             )
     
-    def display_sequence(self, grids: List[np.ndarray], delay_ms: int = 100, auto_advance: bool = True):
-        """
-        Displays a sequence of grids (e.g., from simulate() log).
+    def display_sequence(self, grids: List[np.ndarray], auto_advance: bool = True):
+        self._fit_to_grid(grids[0].shape[0])
         
-        :param grids: List of 2D numpy arrays representing grid states
-        :param delay_ms: Delay between frames in milliseconds
-        :param auto_advance: If True, automatically advances frames. If False, waits for keypress.
-        """
         running = True
         frame_index = 0
         
@@ -124,7 +97,6 @@ class GameVisualizer:
                     if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
                         running = False
                     elif event.key == pygame.K_SPACE:
-                        # Pause/unpause
                         auto_advance = not auto_advance
                     elif event.key == pygame.K_RIGHT:
                         # Next frame
@@ -140,28 +112,11 @@ class GameVisualizer:
             # Auto-advance if enabled
             if auto_advance:
                 frame_index += 1
-                pygame.time.delay(delay_ms)
+                pygame.time.delay(self.delay)
     
-    def update_display(self, fps: int = 60):
-        """
-        Updates the display and handles timing.
-        
-        :param fps: Target frames per second
-        """
+    def update_display(self):
         pygame.display.flip()
-        self.clock.tick(fps)
-    
-    def get_event(self):
-        """
-        Gets pygame events. Returns "exit" if user wants to quit.
-        """
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return "exit"
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q or event.key == pygame.K_ESCAPE:
-                    return "exit"
-        return None
+        self.clock.tick()
     
     def quit(self):
         pygame.quit()

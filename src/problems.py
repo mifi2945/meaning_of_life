@@ -1,6 +1,6 @@
 from __future__ import annotations  # needed in order to reference a Class within itself
 from random import randint, random, choice, choices
-from typing import Generic, TypeVar, Callable
+from typing import Callable
 from abc import ABC, abstractmethod
 import numpy as np
 import copy
@@ -9,15 +9,21 @@ from scipy.signal import convolve2d
 
 
 
-STEPS = 10_000
+STEPS = 100
 INCLUDE_BETWEEN = True
 EXPANSION = -1
 
 
-# makes the state both immutable and hashable
-T = TypeVar("T", bound=tuple)
+class Parameters:
+    steps: int = STEPS
+    include_between: bool = INCLUDE_BETWEEN
+    expansion: int = EXPANSION
+    def __init__(self, steps: int = STEPS, include_between: bool = INCLUDE_BETWEEN, expansion: int = EXPANSION):
+        self.steps = steps
+        self.include_between = include_between
+        self.expansion = expansion
 
-class Problem(ABC, Generic[T]):
+class Problem(ABC):
     """
     Interface representing a generic problem formulation.
 
@@ -27,12 +33,12 @@ class Problem(ABC, Generic[T]):
 
 
     @abstractmethod
-    def value(self, curr_state: T) -> float:
+    def value(self, curr_state: np.ndarray) -> float:
         """
         Performance measure of the current state, used for local search.
 
         Args:
-            curr_state (T): Current state.
+            curr_state: Current state as a numpy array.
 
         Returns:
             float: Fitness or score of the current state.
@@ -40,24 +46,26 @@ class Problem(ABC, Generic[T]):
         pass
 
 
-class CGOL_Problem(Problem[T]):
+class CGOL_Problem(Problem):
     """
     Version of Problem used for Local Search algorithms Hill Climbing, Genetic Algorithm, and Novelty Search.
 
     Implements for Conway's Game of Life, with a list of values representing the 20x20 space.
     """
-    def __init__(self, state_generator: Callable[[], T]):
-        super().__init__(state_generator())
+    def __init__(self, state_generator: Callable[[], np.ndarray]):
+        self.initial_state = state_generator()
         self.state_generator = state_generator
 
 
     @staticmethod
     def simulate(
         initial: np.ndarray,
-        steps: int=STEPS,
-        include_between: bool=INCLUDE_BETWEEN,
-        expansion: int=EXPANSION
+        parameters: Parameters
     ) -> list[np.ndarray]:
+        steps = parameters.steps
+        include_between = parameters.include_between
+        expansion = parameters.expansion
+
         log = []
         
         # Dimension of the intial grid
@@ -83,18 +91,32 @@ class CGOL_Problem(Problem[T]):
                            [1, 0, 1],
                            [1, 1, 1]], dtype=np.uint8)
         
+        # Track bounding box
+        min_r, max_r = bounds[0], bounds[1]
+        min_c, max_c = bounds[0], bounds[1]
+        
         for _ in range(steps):
-            # Find bounding box of living cells for speed
-            living = np.where(M == 1)
+            # Add padding of 1 and account for exclusive end bounds
+            scan_min_r = max(0, min_r - 1)
+            scan_max_r = min(M.shape[0], max_r + 1)
+            scan_min_c = max(0, min_c - 1)
+            scan_max_c = min(M.shape[1], max_c + 1)
+            
+            # Only look for living cells in the region of interest
+            region_to_scan = M[scan_min_r:scan_max_r, scan_min_c:scan_max_c]
+            living = np.where(region_to_scan == 1)
+            
             if len(living[0]) == 0:
-                # Everyone died and your model is bad :(
+                print("Everyone died and your model is bad :(")
                 break
             
-            # Calculate bounds with 1 cell padding (2 is because [) indexing)
-            min_r = max(0, living[0].min() - 1)
-            max_r = min(M.shape[0], living[0].max() + 2)
-            min_c = max(0, living[1].min() - 1)
-            max_c = min(M.shape[1], living[1].max() + 2)            
+            living_r = living[0] + scan_min_r
+            living_c = living[1] + scan_min_c
+            
+            min_r = max(0, living_r.min() - 1)
+            max_r = min(M.shape[0], living_r.max() + 2)
+            min_c = max(0, living_c.min() - 1)
+            max_c = min(M.shape[1], living_c.max() + 2)
             
             region = M[min_r:max_r, min_c:max_c]
             
@@ -102,8 +124,11 @@ class CGOL_Problem(Problem[T]):
             neighbors = convolve2d(region, kernel, mode='same', boundary='fill', fillvalue=0)
             
             # Rules, John
-            new_region = ((region == 1) & ((neighbors == 2) | (neighbors == 3))) | ((region == 0) & (neighbors == 3))
-            new_region = new_region.astype(initial.dtype)
+            # Live cells with 2-3 neighbors survive
+            survives = (region == 1) & ((neighbors == 2) | (neighbors == 3))
+            # Dead cells with exactly 3 neighbors become alive
+            born = (region == 0) & (neighbors == 3)
+            new_region = (survives | born).astype(initial.dtype)
             
             # Update M with the new region
             M[min_r:max_r, min_c:max_c] = new_region
@@ -117,7 +142,7 @@ class CGOL_Problem(Problem[T]):
         return log
 
 
-    def actions(self, curr_state: np.array[int,...]) -> list[int]:
+    def actions(self, curr_state: np.ndarray) -> list[int]:
         """
         Actions that can be applied to a CGoL board.
         We can technically set multiple cells at a time, but we will limit to one per epoch.
@@ -130,7 +155,7 @@ class CGOL_Problem(Problem[T]):
         """
         return [i for i in range(len(curr_state))]
 
-    def result(self, curr_state: np.array[int,...], action:int) -> np.array[int,...]:
+    def result(self, curr_state: np.ndarray, action:int) -> np.ndarray:
         """
         Sets corresponding cell in the state.
 
@@ -147,7 +172,7 @@ class CGOL_Problem(Problem[T]):
         return next_state
 
 
-    def is_dead(self, curr_state: np.array[int,...]) -> bool:
+    def is_dead(self, curr_state: np.ndarray) -> bool:
         """
         Checks if the board has any cells alive.
         Args:
@@ -158,10 +183,10 @@ class CGOL_Problem(Problem[T]):
         """
         return np.sum(curr_state) < 1
 
-    def action_cost(self, curr_state: np.array[int,...], action: str, next_state: np.array[int,...]) -> float:
+    def action_cost(self, curr_state: np.ndarray, action: str, next_state: np.ndarray) -> float:
         return 1
 
-    def quality(self, curr_state: np.array[int,...]) -> float:
+    def quality(self, curr_state: np.ndarray) -> float:
         """
         Quality of the board.
         Args:
@@ -172,7 +197,7 @@ class CGOL_Problem(Problem[T]):
 
         # TODO figure this out lol
     
-    def novelty(self, curr_state: np.array[int,...]) -> float:
+    def novelty(self, curr_state: np.ndarray) -> float:
         """
         Novelty of the board.
         Args:
@@ -199,8 +224,8 @@ class CGOL_Problem(Problem[T]):
         return choices(indeces, weights=probs, k=1)[0]
 
 
-    def selection(self, n:int, population: list[T],
-                  weights: list[float]) -> [T,...]:
+    def selection(self, n:int, population: list[np.ndarray],
+                  weights: list[float]) -> list[np.ndarray]:
         """
         Selects n individuals from a population based on fitness proportionate selection method defined above.
         Args:
@@ -218,7 +243,7 @@ class CGOL_Problem(Problem[T]):
         return [population[i] for i in indeces]
 
 
-    def crossover(self, parent1:T, parent2:T) -> T:
+    def crossover(self, parent1: np.ndarray, parent2: np.ndarray) -> np.ndarray:
         """
         Creates a new state by implementing single point crossover.
 
@@ -228,18 +253,24 @@ class CGOL_Problem(Problem[T]):
 
         Returns: New state created by using single-point crossover.
         """
-        c = randint(1,len(parent1)-1)
-        return parent1[0:c] + parent2[c:]
+        c = randint(1, len(parent1) - 1)
+        # Concatenate arrays instead of tuple slicing
+        return np.concatenate([parent1[:c], parent2[c:]])
 
 
-class GrowthProblem(CGOL_Problem[T]):
-    def objective(self, curr_state: np.array[int,...]) -> float:
+class GrowthProblem(CGOL_Problem):
+    def objective(self, curr_state: np.ndarray) -> float:
         # TODO take end state and do mathy maths to get how many cells are alive (very complex calculations)
         pass
 
+    def value(self, curr_state: np.ndarray) -> float:
+        return 1
 
-class MigrationProblem(CGOL_Problem[T]):
-    def objective(self, curr_state: np.array[int,...]) -> float:
+
+class MigrationProblem(CGOL_Problem):
+    def objective(self, curr_state: np.ndarray) -> float:
         # TODO take end state and do mathy maths to get how far the pop migrated
         pass
 
+    def value(self, curr_state: np.ndarray) -> float:
+        return 1

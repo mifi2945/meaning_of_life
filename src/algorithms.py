@@ -1,7 +1,7 @@
-from problems import CGOL_Problem, T
+from problems import CGOL_Problem, Parameters
 import numpy as np
 
-def hill_climbing(problem: CGOL_Problem) -> list[T]:
+def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
     """
     Hill Climbing Search.
 
@@ -25,7 +25,7 @@ def hill_climbing(problem: CGOL_Problem) -> list[T]:
 
     return best_states
 
-def genetic_algorithm(problem: CGOL_Problem, pop_size:int = 100, num_epochs:int = 1000) -> list[T]:
+def genetic_algorithm(problem: CGOL_Problem, pop_size:int = 100, num_epochs:int = 1000) -> list[np.ndarray]:
     """
     Implements a Genetic Algorithm.
 

@@ -1,7 +1,10 @@
 from problems import CGOL_Problem, Parameters
 import numpy as np
+import copy
 
-def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
+from numba import njit, prange
+
+def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> np.ndarray:
     """
     Hill Climbing Search.
 
@@ -11,45 +14,52 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
     *notes:
         - Each state represents the starting state of that field (ie it needs to be simulated)
     """
-    curr = problem.initial_state
-    best_states = []
+
+    # don't need between steps... for now
+    new_params = copy.deepcopy(parameters)
+    new_params.include_between = False
+
+    best_state = problem.initial_state
     while True:
-        best_states.append(curr)    # store step
-        neighbors = [problem.result(curr, n) for n in problem.actions(curr)]
-        neighbor = neighbors[np.argmax([problem.value(n) for n in neighbors])]      # get max valued neighbor
+        neighbors = [problem.result(best_state, n) for n in problem.actions(best_state)]
+        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in neighbors])]      # get max valued neighbor
 
-        if problem.value(neighbor) <= problem.value(curr):
-            best_states.append(curr)
+        if problem.value(neighbor, new_params) <= problem.value(best_state, new_params):
             break
-        curr = neighbor
+        best_state = neighbor
 
-    return best_states
+    return best_state
 
-def genetic_algorithm(problem: CGOL_Problem, pop_size:int = 100, num_epochs:int = 1000) -> list[np.ndarray]:
+def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:int = 100, num_epochs:int = 100) -> list[np.ndarray]:
     """
     Implements a Genetic Algorithm.
 
-    :param problem: LSProblem Object.
+    :param problem: CGOL_Problem Object.
     :param pop_size: Size of the population.
     :param num_epochs: Number of epochs.
     :return: The best state from the population at each epoch.
     """
+
+    # don't need between steps... for now
+    new_params = copy.deepcopy(parameters)
+    new_params.include_between = False
+
     mutation_prob = 0.5
     best_states = []
 
     population = [problem.state_generator() for _ in range(pop_size)]
-    solved = False
+    # solved = False
     epoch = 0
-    while not solved and epoch < num_epochs:
+    while epoch < num_epochs:
         epoch += 1
-        weights = [problem.value(state) for state in population]
+        weights = [problem.value(state, new_params) for state in population]
+        # weights = np.array([state for state in population])
+        # parallel_ga_helper(problem, new_params, weights)
 
         elite_index = np.argmax(weights)
         weights.pop(elite_index)
         elite = population.pop(elite_index)
         best_states.append(elite)
-        if problem.is_goal(elite):
-            solved = True
 
         population2 = [elite]
         for _ in range(len(population)):
@@ -61,3 +71,11 @@ def genetic_algorithm(problem: CGOL_Problem, pop_size:int = 100, num_epochs:int 
         population = population2
 
     return best_states
+
+@njit(parallel=True)
+def parallel_ga_helper(problem: CGOL_Problem, params: Parameters, weights: np.ndarray):
+    """
+    TODO: ignore for now
+    """
+    for i in prange(len(weights)):
+            weights[i] = problem.value(weights[i], params)

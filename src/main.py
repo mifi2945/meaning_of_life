@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from visualizer import GameVisualizer
-from algorithms import hill_climbing
+from algorithms import hill_climbing, genetic_algorithm
 from problems import Parameters
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem
 from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
@@ -39,7 +39,7 @@ def create_initial_state() -> np.ndarray:
     
     rando = np.random.randint(0, 2, size=100, dtype=np.uint8)
     
-    return death
+    return rando
 
 def main():
     parser = argparse.ArgumentParser(
@@ -65,7 +65,7 @@ def main():
     parser.add_argument(
         "-v", "--visualize",
         action="store_true",
-        default=INCLUDE_BETWEEN,
+        # default=INCLUDE_BETWEEN,
         help="Visualize the simulation (default: True)"
     )
     
@@ -88,8 +88,8 @@ def main():
         "-a", "--search-type",
         type=str,
         default="default",
-        choices=["default", "hill_climbing"],
-        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default)"
+        choices=["default", "hill_climbing", "GA"],
+        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm"
     )
     
     parser.add_argument(
@@ -127,15 +127,16 @@ def main():
             problem=problem,
             parameters=parameters,
         )
-        log = CGOL_Problem.simulate(
-            initial=initial,
-            parameters=parameters
-        )
-    else:
-        log = CGOL_Problem.simulate(
-            initial=initial,
-            parameters=parameters
-        )
+    elif args.search_type == "GA":
+        initial = genetic_algorithm(
+            problem=problem,
+            parameters=parameters,
+        )[-1]
+
+    log = CGOL_Problem.simulate(
+        initial=initial,
+        parameters=parameters
+    )
 
     if args.visualize:
         viz = GameVisualizer(grid_width=args.grid_width, delay=args.delay)
@@ -146,8 +147,9 @@ def main():
             viz.quit()
     else:
         print("\nVisualization disabled (--no-display)")
-        print(f"Final state: {log[-1].shape[0]}x{log[-1].shape[1]} grid")
-        print(f"Final live cells: {np.sum(log[-1])}")
+
+    print(f"Final state: {log[-1].shape[0]}x{log[-1].shape[1]} grid")
+    print(f"Final live cells: {np.sum(log[-1])}")
 
 
 if __name__ == '__main__':

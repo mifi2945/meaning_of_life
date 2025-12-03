@@ -107,7 +107,8 @@ class CGOL_Problem(Problem):
             living = np.where(region_to_scan == 1)
             
             if len(living[0]) == 0:
-                print("Everyone died and your model is bad :(")
+                # TODO need to move this print somewhere else cuz otherwise it prints too much
+                # print("Everyone died and your model is bad :(")
                 break
             
             living_r = living[0] + scan_min_r
@@ -186,6 +187,10 @@ class CGOL_Problem(Problem):
     def action_cost(self, curr_state: np.ndarray, action: str, next_state: np.ndarray) -> float:
         return 1
 
+    @abstractmethod
+    def value(self, curr_state: np.ndarray) -> float:
+        pass
+
     def quality(self, curr_state: np.ndarray) -> float:
         """
         Quality of the board.
@@ -256,6 +261,15 @@ class CGOL_Problem(Problem):
         c = randint(1, len(parent1) - 1)
         # Concatenate arrays instead of tuple slicing
         return np.concatenate([parent1[:c], parent2[c:]])
+    
+    def mutate(self, child: np.ndarray) -> np.ndarray:
+        """
+        Mutate randomly by flipping any random bit
+        """
+        index = randint(0,len(child)-1)
+        mutation = child.copy()
+        mutation[index] ^= 1    # XOR flips the bit
+        return mutation
 
 
 class GrowthProblem(CGOL_Problem):
@@ -263,8 +277,39 @@ class GrowthProblem(CGOL_Problem):
         # TODO take end state and do mathy maths to get how many cells are alive (very complex calculations)
         pass
 
-    def value(self, curr_state: np.ndarray) -> float:
-        return 1
+    def value(self, curr_state: np.ndarray, parameters: Parameters) -> float:
+        """
+        Ratio of total alive over total cells on board
+        We want to reduce spread of cells as well (one larger clump preferred)
+        This is evaluated AFTER the board is simulated
+        """
+
+        # get final simulated state
+        state = CGOL_Problem.simulate(curr_state, parameters)[0]
+
+        alive = np.sum(state)
+        total = state.size
+
+        if alive == 0:
+            return 0.0
+
+        n = int(np.sqrt(total))
+        grid = state.reshape((n, n))
+
+        layer = np.array([
+            [1, 1, 1],
+            [1, 0, 1],
+            [1, 1, 1]
+        ])
+        # live neighbors
+        neighbor_counts = convolve2d(grid, layer, mode='same', boundary='fill', fillvalue=0)
+
+        # clump_score = avg neighbors normalized to [0, 1]
+        clump_score = np.sum(neighbor_counts * grid) / (alive * 8)
+
+        density = alive / total
+        # weighted density by clump
+        return density * (0.5 + 0.5 * clump_score)
 
 
 class MigrationProblem(CGOL_Problem):

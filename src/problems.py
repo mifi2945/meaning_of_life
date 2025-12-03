@@ -1,11 +1,11 @@
 from __future__ import annotations  # needed in order to reference a Class within itself
 from random import randint, random, choice, choices
-from typing import Callable
+from typing import Callable, List
 from abc import ABC, abstractmethod
 import numpy as np
 import copy
 from scipy.signal import convolve2d
-
+from scipy.spatial.distance import cdist
 
 
 
@@ -171,46 +171,155 @@ class CGOL_Problem(Problem):
         next_state[action] ^= 1     # XOR toggle the cell
 
         return next_state
+    
+    def behavior_descriptor(self, state, parameters):
+        final = CGOL_Problem.simulate(state, parameters)[0]
+
+        # 1. Extract bounding box of live cells
+        rows, cols = np.where(final == 1)
+        if len(rows) == 0:
+            return np.zeros((1,), dtype=np.uint8)  # empty pattern
+
+        rmin, rmax = rows.min(), rows.max()
+        cmin, cmax = cols.min(), cols.max()
+
+        shape = final[rmin:rmax+1, cmin:cmax+1]  # cropped pattern
+
+        # 2. Generate all 8 isometries (rotations + reflections)
+        transforms = [
+            shape,
+            np.rot90(shape, 1),
+            np.rot90(shape, 2),
+            np.rot90(shape, 3),
+            np.fliplr(shape),
+            np.flipud(shape),
+            np.rot90(np.fliplr(shape), 1),
+            np.rot90(np.flipud(shape), 1),
+        ]
+
+        # 3. Pick the canonical representation (lexicographically smallest)
+        canonical = min(t.flatten().tobytes() for t in transforms)
+
+        # return as numeric vector
+        return np.frombuffer(canonical, dtype=np.uint8)
 
 
-    def is_dead(self, curr_state: np.ndarray) -> bool:
-        """
-        Checks if the board has any cells alive.
-        Args:
-            curr_state: List values that correspond to the values of the alive/dead cells.
+    def _to_index_set(self, arr: np.ndarray) -> set:  
+        a = np.asarray(arr)
+        if a.size == 0:
+            return set()
+        if a.ndim != 1:
+            a = a.ravel()
+        # nonzero returns tuple; take first element
+        nz = np.nonzero(a)[0]
+        return set(map(int, nz))
 
-        Returns: True if there are no cells alive, false otherwise.
+
+    def _jaccard_set(self, a: set, b: set) -> float:
+        if not a and not b:
+            return 0.0
+        inter = len(a & b)
+        union = len(a | b)
+        if union == 0:
+            return 0.0
+        return 1.0 - (inter / union)
+
+
+    def novelty(self, descriptor: np.ndarray,
+            archive: List[np.ndarray],
+            population_descriptors: List[np.ndarray],
+            k: int = 10) -> float:
+        # Convert primary descriptor -> index set
+        desc_set = self._to_index_set(descriptor)
+
+        # Build pool of sets (population followed by archive)
+        pool_arrays = list(population_descriptors) + list(archive)
+        pool_sets = [self._to_index_set(p) for p in pool_arrays]
+
+        # Compute distances but exclude exactly one self-match (if present).
+        dists = []
+        self_skipped = False
+        for other in pool_sets:
+            if (other == desc_set) and (not self_skipped):
+                # skip the first exact-equal match (treating that as self)
+                self_skipped = True
+                continue
+            d = self._jaccard_set(desc_set, other)
+            dists.append(d)
+
+        if len(dists) == 0:
+            # No neighbors to compare to
+            return 0.0
+
+        # Use up to k nearest neighbors
+        k_eff = min(k, len(dists))
+        dists.sort()
+        return float(sum(dists[:k_eff]) / k_eff)
+
+    # def novelty(self, descriptor, archive, population_descriptors, k=10):
+    #     """
+    #     Novelty = average Jaccard distance to k nearest neighbors.
+    #     descriptor: frozenset of (y,x)
+    #     archive: list of frozensets
+    #     population_descriptors: list of frozensets
+    #     """
+
+    #     def jaccard(a: frozenset, b: frozenset):
+    #         if not a and not b:
+    #             return 0.0
+    #         return 1.0 - len(a & b) / len(a | b)
         
-        """
-        return np.sum(curr_state) < 1
+    #     # Ensure descriptor is a set
+    #     if isinstance(descriptor, np.ndarray):
+    #         descriptor = frozenset(map(tuple, descriptor))
 
-    def action_cost(self, curr_state: np.ndarray, action: str, next_state: np.ndarray) -> float:
-        return 1
+    #     pool = []
+    #     for d in (population_descriptors + archive):
+    #         if isinstance(d, np.ndarray):
+    #             d = frozenset(map(tuple, d))
+    #         pool.append(d)
+
+    #     if len(pool) <= 1:
+    #         return 0.0
+
+    #     # Compute all set distances
+    #     dists = [jaccard(descriptor, other) for other in pool]
+
+    #     # k-nearest neighbor novelty
+    #     k = min(k, len(dists) - 1)
+    #     nearest = sorted(dists)[:k]
+
+    #     return float(np.mean(nearest))
+
+    # def novelty(self, descriptor, archive, population_descriptors, k_novelty):
+    #     """
+    #     Novelty of the board.
+    #     Returns: the novelty value of the board
+
+    #     """
+    #     # concat archive + population
+    #     all_desc = population_descriptors
+    #     if len(archive) > 0:
+    #         all_desc = np.vstack([all_desc, archive])
+        
+    #     if len(all_desc) <= 1:
+    #         return 0.0
+        
+    #     # pairwise distances
+    #     dists = cdist([descriptor], all_desc, metric='euclidean')[0]
+        
+    #     # take k nearest neighbors
+    #     k = min(k_novelty, len(dists)-1)
+    #     nearest = np.partition(dists, k)[:k]
+
+    #     print(float(np.mean(nearest)))
+    #     return float(np.mean(nearest))
+
 
     @abstractmethod
-    def value(self, curr_state: np.ndarray) -> float:
+    def value(self, curr_state: np.ndarray, parameters: Parameters) -> float:
         pass
 
-    def quality(self, curr_state: np.ndarray) -> float:
-        """
-        Quality of the board.
-        Args:
-            curr_state: List values that correspond to the values of the alive/dead cells.
-
-        Returns: the quality value of the board.
-        """
-
-        # TODO figure this out lol
-    
-    def novelty(self, curr_state: np.ndarray) -> float:
-        """
-        Novelty of the board.
-        Args:
-            curr_state: List values that correspond to the values of the alive/dead cells.
-
-        Returns: the novelty value of the board
-
-        """
 
     def fitness_proportionate_selection(self, fitness_values:list[float]) -> int:
         """

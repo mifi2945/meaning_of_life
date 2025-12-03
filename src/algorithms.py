@@ -2,7 +2,7 @@ from problems import CGOL_Problem, Parameters
 import numpy as np
 import copy
 
-from numba import njit, prange
+# from concurrent.futures import ProcessPoolExecutor
 
 def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> np.ndarray:
     """
@@ -53,8 +53,7 @@ def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:in
     while epoch < num_epochs:
         epoch += 1
         weights = [problem.value(state, new_params) for state in population]
-        # weights = np.array([state for state in population])
-        # parallel_ga_helper(problem, new_params, weights)
+        # weights = eval_batch(problem, new_params, population)
 
         elite_index = np.argmax(weights)
         weights.pop(elite_index)
@@ -72,10 +71,114 @@ def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:in
 
     return best_states
 
-@njit(parallel=True)
-def parallel_ga_helper(problem: CGOL_Problem, params: Parameters, weights: np.ndarray):
+
+def novelty_search_with_quality(problem:CGOL_Problem,
+                                parameters:Parameters,
+                                pop_size:int=100,
+                                num_epochs:int=100,
+                                k:int=10,
+                                novelty_threshold:float=0.5,
+                                quality_threshold:float=0.2,
+                                archive_max:int=500,
+                                novelty_weight:int=0.5):
     """
-    TODO: ignore for now
+    NS-Q: novelty + quality
     """
-    for i in prange(len(weights)):
-            weights[i] = problem.value(weights[i], params)
+
+    new_params = copy.deepcopy(parameters)
+    new_params.include_between = False
+
+    population = [problem.state_generator() for _ in range(pop_size)]
+    archive = []
+
+    # initial eval
+    descriptors = [problem.behavior_descriptor(ind, new_params)
+                   for ind in population]
+    novelties = [
+        problem.novelty(desc, archive, descriptors, k)
+        for desc in descriptors
+    ]
+    qualities = [problem.value(ind, new_params) for ind in population]
+
+    # initial archive update
+    for desc, n, q in zip(descriptors, novelties, qualities):
+        if n >= novelty_threshold and q >= quality_threshold:
+            archive.append(desc)
+
+    for epoch in range(num_epochs):
+
+        # selection
+        combined = novelty_weight * np.array(novelties) + \
+                   (1 - novelty_weight) * np.array(qualities)
+        probs = combined + 1e-6
+        probs /= probs.sum()
+
+        indices = np.random.choice(len(population), size=pop_size, p=probs)
+        parents = [population[i] for i in indices]
+
+        # offspring
+        offspring = []
+        for _ in range(pop_size):
+            # p1, p2 = np.random.choice(parents, 2, replace=True)
+            i1, i2 = np.random.choice(len(parents), 2, replace=True)
+            p1, p2 = population[i1], population[i2]
+            child = problem.crossover(p1, p2)
+            if np.random.rand() < 0.5:
+                child = problem.mutate(child)
+            offspring.append(child)
+
+        # eval offspring
+        offspring_desc = [problem.behavior_descriptor(ind, new_params)
+                            for ind in offspring]
+
+        offspring_novel = [
+        problem.novelty(desc, archive, offspring_desc, k)
+        for desc in offspring_desc
+        ]
+        
+
+        offspring_quality = [
+            problem.value(ind, new_params) for ind in offspring
+        ]
+
+        # ----------------------------
+        # Archive update
+        # ----------------------------
+        for desc, n, q in zip(offspring_desc, offspring_novel, offspring_quality):
+            if n >= novelty_threshold and q >= quality_threshold:
+                archive.append(desc)
+
+        if len(archive) > archive_max:
+            # remove least novel
+            idx = np.argsort(offspring_novel)[::-1]
+            archive = [archive[i] for i in idx[:archive_max]]
+
+        # ----------------------------
+        # Replace population
+        # Replace worst NS-Q individuals with offspring
+        # ----------------------------
+        old_comb = combined
+        new_comb = novelty_weight * np.array(offspring_novel) + \
+                   (1 - novelty_weight) * np.array(offspring_quality)
+
+        # choose best pop_size individuals from old+new
+        full_pop = population + offspring
+        full_desc = descriptors + offspring_desc
+        full_nov = novelties + offspring_novel
+        full_qual = qualities + offspring_quality
+
+        full_comb = np.concatenate([old_comb, new_comb])
+
+        best_idx = np.argsort(full_comb)[-pop_size:]
+        population = [full_pop[i] for i in best_idx]
+        descriptors = [full_desc[i] for i in best_idx]
+        novelties = [full_nov[i] for i in best_idx]
+        qualities = [full_qual[i] for i in best_idx]
+
+    return population
+
+
+
+# def eval_batch(problem: CGOL_Problem, params: Parameters, population: list[np.ndarray]):
+#     with ProcessPoolExecutor() as ex:
+#         return list(ex.map(lambda s: problem.value(s, params), population))

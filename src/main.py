@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from visualizer import GameVisualizer
-from algorithms import hill_climbing, genetic_algorithm
+from algorithms import hill_climbing, genetic_algorithm, novelty_search_with_quality
 from problems import Parameters
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem
 from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
@@ -88,8 +88,9 @@ def main():
         "-a", "--search-type",
         type=str,
         default="default",
-        choices=["default", "hill_climbing", "GA"],
-        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm"
+        choices=["default", "hill_climbing", "GA", "NS_Q"],
+        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm, " \
+        "'NS_Q' for Novelty Search"
     )
     
     parser.add_argument(
@@ -129,6 +130,11 @@ def main():
         )
     elif args.search_type == "GA":
         initial = genetic_algorithm(
+            problem=problem,
+            parameters=parameters,
+        )[-1]
+    elif args.search_type == "NS_Q":
+        initial = novelty_search_with_quality(
             problem=problem,
             parameters=parameters,
         )[-1]

@@ -22,7 +22,8 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> np.ndarray:
     best_state = problem.initial_state
     while True:
         neighbors = [problem.result(best_state, n) for n in problem.actions(best_state)]
-        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in neighbors])]      # get max valued neighbor
+        final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in neighbors]
+        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in final_states])]      # get max valued neighbor
 
         if problem.value(neighbor, new_params) <= problem.value(best_state, new_params):
             break
@@ -52,7 +53,8 @@ def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:in
     epoch = 0
     while epoch < num_epochs:
         epoch += 1
-        weights = [problem.value(state, new_params) for state in population]
+        final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
+        weights = [problem.value(state, new_params) for state in final_states]
         # weights = eval_batch(problem, new_params, population)
 
         elite_index = np.argmax(weights)
@@ -91,14 +93,16 @@ def novelty_search_with_quality(problem:CGOL_Problem,
     population = [problem.state_generator() for _ in range(pop_size)]
     archive = []
 
+    final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
+
     # initial eval
     descriptors = [problem.behavior_descriptor(ind, new_params)
-                   for ind in population]
+                   for ind in final_states]
     novelties = [
         problem.novelty(desc, archive, descriptors, k)
         for desc in descriptors
     ]
-    qualities = [problem.value(ind, new_params) for ind in population]
+    qualities = [problem.value(ind, new_params) for ind in final_states]
 
     # initial archive update
     for desc, n, q in zip(descriptors, novelties, qualities):
@@ -127,18 +131,19 @@ def novelty_search_with_quality(problem:CGOL_Problem,
                 child = problem.mutate(child)
             offspring.append(child)
 
+        final_offs = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in offspring]
         # eval offspring
         offspring_desc = [problem.behavior_descriptor(ind, new_params)
-                            for ind in offspring]
+                            for ind in final_offs]
 
         offspring_novel = [
-        problem.novelty(desc, archive, offspring_desc, k)
-        for desc in offspring_desc
+            problem.novelty(desc, archive, offspring_desc, k)
+            for desc in offspring_desc
         ]
         
 
         offspring_quality = [
-            problem.value(ind, new_params) for ind in offspring
+            problem.value(ind, new_params) for ind in final_offs
         ]
 
         # ----------------------------
@@ -148,10 +153,16 @@ def novelty_search_with_quality(problem:CGOL_Problem,
             if n >= novelty_threshold and q >= quality_threshold:
                 archive.append(desc)
 
+        # TODO update based on BOTH novelty and quality
         if len(archive) > archive_max:
             # remove least novel
-            idx = np.argsort(offspring_novel)[::-1]
+            combined_ofs = novelty_weight * np.array(offspring_novel) + \
+               (1 - novelty_weight) * np.array(offspring_quality)
+
+            idx = np.argsort(combined_ofs)[::-1]  # highest combined score
             archive = [archive[i] for i in idx[:archive_max]]
+            # idx = np.argsort(offspring_novel)[::-1]
+            # archive = [archive[i] for i in idx[:archive_max]]
 
         # ----------------------------
         # Replace population
@@ -176,9 +187,3 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         qualities = [full_qual[i] for i in best_idx]
 
     return population
-
-
-
-# def eval_batch(problem: CGOL_Problem, params: Parameters, population: list[np.ndarray]):
-#     with ProcessPoolExecutor() as ex:
-#         return list(ex.map(lambda s: problem.value(s, params), population))

@@ -172,8 +172,8 @@ class CGOL_Problem(Problem):
 
         return next_state
     
-    def behavior_descriptor(self, state, parameters):
-        final = CGOL_Problem.simulate(state, parameters)[0]
+    def behavior_descriptor(self, final, parameters):
+        # final = CGOL_Problem.simulate(state, parameters)[0]
 
         # 1. Extract bounding box of live cells
         rows, cols = np.where(final == 1)
@@ -256,65 +256,6 @@ class CGOL_Problem(Problem):
         dists.sort()
         return float(sum(dists[:k_eff]) / k_eff)
 
-    # def novelty(self, descriptor, archive, population_descriptors, k=10):
-    #     """
-    #     Novelty = average Jaccard distance to k nearest neighbors.
-    #     descriptor: frozenset of (y,x)
-    #     archive: list of frozensets
-    #     population_descriptors: list of frozensets
-    #     """
-
-    #     def jaccard(a: frozenset, b: frozenset):
-    #         if not a and not b:
-    #             return 0.0
-    #         return 1.0 - len(a & b) / len(a | b)
-        
-    #     # Ensure descriptor is a set
-    #     if isinstance(descriptor, np.ndarray):
-    #         descriptor = frozenset(map(tuple, descriptor))
-
-    #     pool = []
-    #     for d in (population_descriptors + archive):
-    #         if isinstance(d, np.ndarray):
-    #             d = frozenset(map(tuple, d))
-    #         pool.append(d)
-
-    #     if len(pool) <= 1:
-    #         return 0.0
-
-    #     # Compute all set distances
-    #     dists = [jaccard(descriptor, other) for other in pool]
-
-    #     # k-nearest neighbor novelty
-    #     k = min(k, len(dists) - 1)
-    #     nearest = sorted(dists)[:k]
-
-    #     return float(np.mean(nearest))
-
-    # def novelty(self, descriptor, archive, population_descriptors, k_novelty):
-    #     """
-    #     Novelty of the board.
-    #     Returns: the novelty value of the board
-
-    #     """
-    #     # concat archive + population
-    #     all_desc = population_descriptors
-    #     if len(archive) > 0:
-    #         all_desc = np.vstack([all_desc, archive])
-        
-    #     if len(all_desc) <= 1:
-    #         return 0.0
-        
-    #     # pairwise distances
-    #     dists = cdist([descriptor], all_desc, metric='euclidean')[0]
-        
-    #     # take k nearest neighbors
-    #     k = min(k_novelty, len(dists)-1)
-    #     nearest = np.partition(dists, k)[:k]
-
-    #     print(float(np.mean(nearest)))
-    #     return float(np.mean(nearest))
-
 
     @abstractmethod
     def value(self, curr_state: np.ndarray, parameters: Parameters) -> float:
@@ -382,11 +323,7 @@ class CGOL_Problem(Problem):
 
 
 class GrowthProblem(CGOL_Problem):
-    def objective(self, curr_state: np.ndarray) -> float:
-        # TODO take end state and do mathy maths to get how many cells are alive (very complex calculations)
-        pass
-
-    def value(self, curr_state: np.ndarray, parameters: Parameters) -> float:
+    def value(self, state: np.ndarray, parameters: Parameters) -> float:
         """
         Ratio of total alive over total cells on board
         We want to reduce spread of cells as well (one larger clump preferred)
@@ -394,37 +331,34 @@ class GrowthProblem(CGOL_Problem):
         """
 
         # get final simulated state
-        state = CGOL_Problem.simulate(curr_state, parameters)[0]
+        # state = CGOL_Problem.simulate(curr_state, parameters)[0]
 
         alive = np.sum(state)
-        total = state.size
+        # total = state.size
 
-        if alive == 0:
-            return 0.0
+        # if alive == 0:
+        #     return 0.0
 
-        n = int(np.sqrt(total))
-        grid = state.reshape((n, n))
+        # n = int(np.sqrt(total))
+        # grid = state.reshape((n, n))
 
-        layer = np.array([
-            [1, 1, 1],
-            [1, 0, 1],
-            [1, 1, 1]
-        ])
-        # live neighbors
-        neighbor_counts = convolve2d(grid, layer, mode='same', boundary='fill', fillvalue=0)
+        # layer = np.array([
+        #     [1, 1, 1],
+        #     [1, 0, 1],
+        #     [1, 1, 1]
+        # ])
+        # # live neighbors
+        # neighbor_counts = convolve2d(grid, layer, mode='same', boundary='fill', fillvalue=0)
 
-        # clump_score = avg neighbors normalized to [0, 1]
-        clump_score = np.sum(neighbor_counts * grid) / (alive * 8)
+        # # clump_score = avg neighbors normalized to [0, 1]
+        # clump_score = np.sum(neighbor_counts * grid) / (alive * 8)
 
-        density = alive / total
+        # density = alive / total
         # weighted density by clump
-        return density * (0.5 + 0.5 * clump_score)
+        #* (0.5 + 0.5 * clump_score)
+        return alive 
 
 
 class MigrationProblem(CGOL_Problem):
-    def objective(self, curr_state: np.ndarray) -> float:
-        # TODO take end state and do mathy maths to get how far the pop migrated
-        pass
-
     def value(self, curr_state: np.ndarray) -> float:
         return 1

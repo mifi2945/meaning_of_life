@@ -1,7 +1,12 @@
 import argparse
 import numpy as np
+import torch
 from visualizer import GameVisualizer
-from algorithms import hill_climbing, genetic_algorithm, novelty_search_with_quality
+from algorithms import (
+    hill_climbing, genetic_algorithm, novelty_search_with_quality,
+    genetic_algorithm_parallel, novelty_search_with_quality_parallel
+)
+from pytorch_parallel import get_device
 from problems import Parameters
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem
 from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
@@ -88,9 +93,15 @@ def main():
         "-a", "--search-type",
         type=str,
         default="default",
-        choices=["default", "hill_climbing", "GA", "NS_Q"],
+        choices=["default", "hill_climbing", "GA", "NS_Q", "GA_parallel", "NS_Q_parallel"],
         help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm, " \
-        "'NS_Q' for Novelty Search"
+        "'NS_Q' for Novelty Search, 'GA_parallel' for parallelized GA, 'NS_Q_parallel' for parallelized NS-Q"
+    )
+    
+    parser.add_argument(
+        "--no-cuda",
+        action="store_true",
+        help="Disable CUDA even if available (use CPU instead)"
     )
     
     parser.add_argument(
@@ -123,6 +134,15 @@ def main():
     else:
         problem = CGOL_Problem(state_generator=create_initial_state)
 
+    use_cuda = not args.no_cuda
+    
+    if use_cuda and torch.cuda.is_available():
+        device = get_device()
+        print(f"Using device: {device}")
+    else:
+        device = None
+        print("Using CPU")
+    
     if args.search_type == "hill_climbing":
         initial = hill_climbing(
             problem=problem,
@@ -137,6 +157,18 @@ def main():
         initial = novelty_search_with_quality(
             problem=problem,
             parameters=parameters,
+        )[-1]
+    elif args.search_type == "GA_parallel":
+        initial = genetic_algorithm_parallel(
+            problem=problem,
+            parameters=parameters,
+            use_cuda=use_cuda,
+        )[-1]
+    elif args.search_type == "NS_Q_parallel":
+        initial = novelty_search_with_quality_parallel(
+            problem=problem,
+            parameters=parameters,
+            use_cuda=use_cuda,
         )[-1]
 
     log = CGOL_Problem.simulate(

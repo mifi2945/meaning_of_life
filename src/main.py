@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 from visualizer import GameVisualizer
-from algorithms import hill_climbing, genetic_algorithm
+from algorithms import hill_climbing, genetic_algorithm, genetic_algorithm_parallel, novelty_search
 from problems import Parameters
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem
 from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
@@ -88,8 +88,8 @@ def main():
         "-a", "--search-type",
         type=str,
         default="default",
-        choices=["default", "hill_climbing", "GA"],
-        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm"
+        choices=["default", "hill_climbing", "GA", "GA_parallel", "novelty"],
+        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing, 'GA' for Genetic Algorithm, 'GA_parallel' for GPU-accelerated GA, 'novelty' for Novelty Search"
     )
     
     parser.add_argument(
@@ -131,6 +131,25 @@ def main():
         initial = genetic_algorithm(
             problem=problem,
             parameters=parameters,
+        )[-1]
+    elif args.search_type == "GA_parallel":
+        print("Using GPU-accelerated parallel Genetic Algorithm...")
+        initial = genetic_algorithm_parallel(
+            problem=problem,
+            parameters=parameters,
+            pop_size=100,
+            num_epochs=100,
+        )[-1]
+    elif args.search_type == "novelty":
+        print("Using GPU-accelerated Novelty Search...")
+        initial = novelty_search(
+            problem=problem,
+            parameters=parameters,
+            pop_size=100,
+            num_epochs=100,
+            novelty_threshold=0.1,
+            archive_size=1000,
+            k=15,
         )[-1]
 
     log = CGOL_Problem.simulate(

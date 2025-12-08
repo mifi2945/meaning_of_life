@@ -79,3 +79,82 @@ def parallel_ga_helper(problem: CGOL_Problem, params: Parameters, weights: np.nd
     """
     for i in prange(len(weights)):
             weights[i] = problem.value(weights[i], params)
+
+
+def genetic_algorithm_parallel(
+    problem: CGOL_Problem,
+    parameters: Parameters,
+    pop_size: int = 100,
+    num_epochs: int = 100,
+    mutation_prob: float = 0.5,
+    batch_size: int = None
+) -> list[np.ndarray]:
+    """
+    GPU-accelerated parallel version of genetic algorithm.
+    Uses PyTorch/CUDA for batch processing.
+    
+    Args:
+        problem: CGOL_Problem instance
+        parameters: Simulation parameters
+        pop_size: Population size
+        num_epochs: Number of generations
+        mutation_prob: Probability of mutation
+        batch_size: Batch size for GPU processing (defaults to pop_size)
+        
+    Returns:
+        List of best states from each epoch
+    """
+    from parallel_algorithms import batch_genetic_algorithm
+    return batch_genetic_algorithm(
+        problem=problem,
+        parameters=parameters,
+        pop_size=pop_size,
+        num_epochs=num_epochs,
+        mutation_prob=mutation_prob,
+        batch_size=batch_size
+    )
+
+
+def novelty_search(
+    problem: CGOL_Problem,
+    parameters: Parameters,
+    pop_size: int = 100,
+    num_epochs: int = 100,
+    mutation_prob: float = 0.5,
+    novelty_threshold: float = 0.1,
+    archive_size: int = 1000,
+    k: int = 15,
+    batch_size: int = None
+) -> list[np.ndarray]:
+    """
+    GPU-accelerated Novelty Search algorithm.
+    
+    Novelty Search selects individuals based on behavioral novelty rather than fitness.
+    This encourages exploration of diverse solutions.
+    
+    Args:
+        problem: CGOL_Problem instance
+        parameters: Simulation parameters
+        pop_size: Population size
+        num_epochs: Number of generations
+        mutation_prob: Probability of mutation
+        novelty_threshold: Minimum novelty to add to archive
+        archive_size: Maximum archive size
+        k: Number of nearest neighbors for novelty calculation
+        batch_size: Batch size for GPU processing (defaults to pop_size)
+        
+    Returns:
+        List of most novel states from each epoch
+    """
+    from parallel_algorithms import batch_novelty_search
+    return batch_novelty_search(
+        problem=problem,
+        parameters=parameters,
+        pop_size=pop_size,
+        num_epochs=num_epochs,
+        mutation_prob=mutation_prob,
+        novelty_threshold=novelty_threshold,
+        archive_size=archive_size,
+        k=k,
+        batch_size=batch_size
+    )

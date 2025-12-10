@@ -129,7 +129,6 @@ def novelty_search_with_quality(problem:CGOL_Problem,
 
     # --- Main Evolutionary Loop ---
     for epoch in range(num_epochs):
-
         # ----------------------------
         # Selection and Elitism
         # ----------------------------

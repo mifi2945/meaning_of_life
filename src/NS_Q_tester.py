@@ -118,7 +118,7 @@ def migration():
     plt.grid(True)
     plt.legend()
 
-    out_path = f"migration_plots/all5.png"
+    out_path = f"migration_plots/all.png"
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()

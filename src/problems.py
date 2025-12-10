@@ -121,7 +121,7 @@ class CGOL_Problem(Problem):
         s = int(len(initial) ** 0.5)
 
         # How far we can expand the grid
-        size = s + (steps//2) + 1 if expansion == -1 else s + expansion
+        size = (s + (steps//2) + 1 if expansion == -1 else s + expansion) * 2
         M = np.zeros((size, size), dtype=initial.dtype)
 
         # (middle - half, middle + half) is where the initial grid goes in the new one

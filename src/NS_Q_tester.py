@@ -168,6 +168,6 @@ def growth_over_epochs():
     print(f"\nPlot saved to {out_path}")
 
 if __name__ == "__main__":
-    growth_over_runs()
+    #growth_over_runs()
     growth_over_epochs()
     migration()

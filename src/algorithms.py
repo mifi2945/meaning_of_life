@@ -4,12 +4,12 @@ import copy
 import torch
 from pytorch_parallel import (
     get_device, simulate_batch, value_batch, 
-    novelty_batch
+    novelty_batch, behavior_descriptor_batch
 )
 
 # from concurrent.futures import ProcessPoolExecutor
 
-def hill_climbing(problem: CGOL_Problem, parameters: Parameters, use_cuda: bool = True) -> np.ndarray:
+def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
     """
     Hill Climbing Search using PyTorch/CUDA for batched simulations.
     Automatically uses GPU if available, falls back to CPU otherwise.
@@ -17,7 +17,10 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters, use_cuda: bool 
     :param problem: Local Search Problem Object.
     :param parameters: Simulation parameters.
     :param use_cuda: Whether to use CUDA if available (default: True).
-    :return: Returns the best state found.
+    :return: Returns a list of the best states (as evaluated using value()) at each epoch.
+
+    *notes:
+        - Each state represents the starting state of that field (ie it needs to be simulated)
     """
 
     # don't need between steps... for now
@@ -27,12 +30,15 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters, use_cuda: bool 
     device = get_device() if use_cuda else torch.device("cpu")
     
     # Determine problem type for fitness evaluation
-    problem_type = "growth" if hasattr(problem, '__class__') and "Growth" in problem.__class__.__name__ else "migration"
-
-    best_state = problem.initial_state
+    problem_type = problem.type
+    
+    length = int(np.sqrt(len(problem.initial_state)))
+    best_state = problem.initial_state.reshape((length, length))
+    best_states = []
     
     while True:
-        neighbors = [problem.result(best_state, n) for n in problem.actions(best_state)]
+        best_states.append(best_state.flatten())
+        neighbors = [problem.result(best_state.flatten(), n) for n in problem.actions(best_state.flatten())]
         
         # Batch simulate all neighbors
         neighbors_array = np.array(neighbors)
@@ -45,15 +51,16 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters, use_cuda: bool 
         
         # Find best neighbor
         best_neighbor_idx = np.argmax(fitness_values)
-        neighbor = neighbors[best_neighbor_idx]
+        neighbor = neighbors[best_neighbor_idx].reshape((length, length))
         neighbor_fitness = fitness_values[best_neighbor_idx]
         
         # Evaluate current best state for comparison
-        best_state_tensor = torch.from_numpy(best_state.reshape(1, -1)).to(device)
+        best_state_tensor = torch.from_numpy(best_state.flatten().reshape(1, -1)).to(device)
         best_final = simulate_batch(best_state_tensor, new_params, device)
         best_fitness = value_batch(best_final, problem_type).cpu().numpy()[0]
 
         if neighbor_fitness <= best_fitness:
+            best_states.append(best_state.flatten())
             break
         best_state = neighbor
 
@@ -69,7 +76,7 @@ def genetic_algorithm(
     """
     Genetic Algorithm using PyTorch/CUDA for batched simulations.
     Automatically uses GPU if available, falls back to CPU otherwise.
-    
+
     :param problem: CGOL_Problem Object.
     :param parameters: Simulation parameters.
     :param pop_size: Size of the population.
@@ -77,17 +84,21 @@ def genetic_algorithm(
     :param use_cuda: Whether to use CUDA if available (default: True).
     :return: The best state from the population at each epoch.
     """
+
+    # don't need between steps... for now
     new_params = copy.deepcopy(parameters)
     new_params.include_between = False
-    
+
     device = get_device() if use_cuda else torch.device("cpu")
-    mutation_prob = 0.5
-    best_states = []
     
     # Determine problem type for fitness evaluation
     problem_type = problem.type
+    
+    mutation_prob = 0.5
+    best_states = []
+
     # Initialize population
-    population = np.array([problem.state_generator() for _ in range(pop_size)])
+    population = np.array([problem.state_generator(problem.type) for _ in range(pop_size)])
     
     epoch = 0
     while epoch < num_epochs:
@@ -100,17 +111,17 @@ def genetic_algorithm(
         # Batch evaluate fitness
         weights_tensor = value_batch(final_states, problem_type)
         weights = weights_tensor.cpu().numpy().tolist()
-        
+
         # Find elite
         elite_index = np.argmax(weights)
         elite = population[elite_index].copy()
         best_states.append(elite)
-        
+
         # Remove elite from population for selection
         population_without_elite = np.delete(population, elite_index, axis=0)
         weights_without_elite = weights.copy()
         weights_without_elite.pop(elite_index)
-        
+
         # Create new population
         population2 = [elite]
         for _ in range(len(population_without_elite)):
@@ -121,7 +132,7 @@ def genetic_algorithm(
             population2.append(child)
         
         population = np.array(population2)
-    
+
     return best_states
 
 
@@ -143,16 +154,16 @@ def novelty_search_with_quality(
     """
     new_params = copy.deepcopy(parameters)
     new_params.include_between = False
-    
+
     device = get_device() if use_cuda else torch.device("cpu")
     
     # Determine problem type for fitness evaluation
     problem_type = problem.type
-    
+
     # Initialize population
-    population = np.array([problem.state_generator() for _ in range(pop_size)])
+    population = np.array([problem.state_generator(problem.type) for _ in range(pop_size)])
     archive = []
-    
+
     # Initial evaluation - batch simulate
     population_tensor = torch.from_numpy(population).to(device)
     final_states = simulate_batch(population_tensor, new_params, device)
@@ -161,42 +172,30 @@ def novelty_search_with_quality(
     qualities_tensor = value_batch(final_states, problem_type)
     qualities = qualities_tensor.cpu().numpy().tolist()
     
-    # Compute descriptors (still needs individual processing for canonicalization)
-    final_states_np = final_states.cpu().numpy()
-    descriptors = [problem.behavior_descriptor(state, new_params) for state in final_states_np]
+    # Compute descriptors using batch function
+    descriptors = behavior_descriptor_batch(final_states, device)
     
     # Compute novelties
     novelties = novelty_batch(descriptors, archive, k, device).tolist()
-    
-    # Initial archive update
-
-    final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
-
-    # initial eval
-    descriptors = [problem.behavior_descriptor(ind, new_params)
-                   for ind in final_states]
-    novelties = [
-        problem.novelty(desc, archive, descriptors, k)
-        for desc in descriptors
-    ]
-    qualities = [problem.value(ind, new_params) for ind in final_states]
 
     best_states = [population[np.argmax(qualities)]]
 
-    # initial archive update
+    # Initial archive update
     for desc, n, q in zip(descriptors, novelties, qualities):
         if n >= novelty_threshold and q >= quality_threshold:
             archive.append(desc)
-    
+
     for epoch in range(num_epochs):
-        # Selection
-        combined = novelty_weight * np.array(novelties) + (1 - novelty_weight) * np.array(qualities)
+
+        # selection
+        combined = novelty_weight * np.array(novelties) + \
+                   (1 - novelty_weight) * np.array(qualities)
         probs = combined + 1e-6
         probs /= probs.sum()
-        
+
         indices = np.random.choice(len(population), size=pop_size, p=probs)
         parents = population[indices]
-        
+
         # Generate offspring
         offspring = []
         for _ in range(pop_size):
@@ -207,46 +206,57 @@ def novelty_search_with_quality(
                 child = problem.mutate(child)
             offspring.append(child)
 
-        final_offs = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in offspring]
-        # eval offspring
-        offspring_desc = [problem.behavior_descriptor(ind, new_params)
-                            for ind in final_offs]
-
-        offspring_novel = [
-            problem.novelty(desc, archive, offspring_desc, k)
-            for desc in offspring_desc
-        ]
+        # Batch simulate offspring
+        offspring_array = np.array(offspring)
+        offspring_tensor = torch.from_numpy(offspring_array).to(device)
+        final_offs = simulate_batch(offspring_tensor, new_params, device)
         
-
-        offspring_quality = [
-            problem.value(ind, new_params) for ind in final_offs
-        ]
+        # Batch compute fitness
+        offspring_quality_tensor = value_batch(final_offs, problem_type)
+        offspring_quality = offspring_quality_tensor.cpu().numpy().tolist()
+        
+        # Batch compute descriptors
+        offspring_desc = behavior_descriptor_batch(final_offs, device)
+        
+        # Compute novelties
+        offspring_novel = novelty_batch(offspring_desc, archive, k, device).tolist()
 
         best_states.append(offspring[np.argmax(offspring_quality)])
 
         # ----------------------------
         # Archive update
+        # ----------------------------
         for desc, n, q in zip(offspring_desc, offspring_novel, offspring_quality):
             if n >= novelty_threshold and q >= quality_threshold:
                 archive.append(desc)
-        
+
+        # TODO update based on BOTH novelty and quality
         if len(archive) > archive_max:
-            combined_ofs = novelty_weight * np.array(offspring_novel) + (1 - novelty_weight) * np.array(offspring_quality)
-            idx = np.argsort(combined_ofs)[::-1]
+            # remove least novel
+            combined_ofs = novelty_weight * np.array(offspring_novel) + \
+               (1 - novelty_weight) * np.array(offspring_quality)
+
+            idx = np.argsort(combined_ofs)[::-1]  # highest combined score
             archive = [archive[i] for i in idx[:archive_max]]
-        
+            # idx = np.argsort(offspring_novel)[::-1]
+            # archive = [archive[i] for i in idx[:archive_max]]
+
+        # ----------------------------
         # Replace population
+        # Replace worst NS-Q individuals with offspring
+        # ----------------------------
         old_comb = combined
-        new_comb = novelty_weight * np.array(offspring_novel) + (1 - novelty_weight) * np.array(offspring_quality)
-        
+        new_comb = novelty_weight * np.array(offspring_novel) + \
+                   (1 - novelty_weight) * np.array(offspring_quality)
+
         # Combine populations (convert to lists to handle variable shapes)
-        full_pop = population.tolist() + offspring.tolist()
+        full_pop = population.tolist() + offspring
         full_desc = descriptors + offspring_desc
         full_nov = novelties + offspring_novel
         full_qual = qualities + offspring_quality
-        
+
         full_comb = np.concatenate([old_comb, new_comb])
-        
+
         best_idx = np.argsort(full_comb)[-pop_size:]
         population_list = [full_pop[i] for i in best_idx]
         population = np.array(population_list)

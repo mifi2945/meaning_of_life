@@ -104,14 +104,14 @@ def behavior_descriptor_batch(
 ) -> List[np.ndarray]:
     """
     Compute behavior descriptors for a batch of final states.
-    Note: This still processes individually due to the complexity of canonicalization.
+    Matches the CGOL_Problem.behavior_descriptor implementation.
     
     Args:
         final_states: Tensor of shape (batch_size, h, w)
         device: PyTorch device
     
     Returns:
-        List of descriptor arrays
+        List of descriptor arrays (feature vectors: [population/100, width/20, height/20, density])
     """
     if device is None:
         device = get_device()
@@ -119,60 +119,36 @@ def behavior_descriptor_batch(
     batch_size = final_states.shape[0]
     descriptors = []
     
-    # Convert to numpy for processing (can be optimized further)
+    # Convert to numpy for processing
     states_np = final_states.cpu().numpy()
     
     for i in range(batch_size):
         state = states_np[i]
         rows, cols = np.where(state == 1)
+        
         if len(rows) == 0:
-            descriptors.append(np.zeros((1,), dtype=np.uint8))
+            descriptors.append(np.array([0.0, 0.0, 0.0, 0.0]))
             continue
         
+        # Calculate Bounding Box
         rmin, rmax = rows.min(), rows.max()
         cmin, cmax = cols.min(), cols.max()
         
-        shape = state[rmin:rmax+1, cmin:cmax+1]
+        height = rmax - rmin + 1
+        width = cmax - cmin + 1
+        population = len(rows)
+        area = height * width
+        density = population / area if area > 0 else 0
         
-        # Generate all 8 isometries
-        transforms = [
-            shape,
-            np.rot90(shape, 1),
-            np.rot90(shape, 2),
-            np.rot90(shape, 3),
-            np.fliplr(shape),
-            np.flipud(shape),
-            np.rot90(np.fliplr(shape), 1),
-            np.rot90(np.flipud(shape), 1),
-        ]
-        
-        # Pick canonical representation
-        canonical = min(t.flatten().tobytes() for t in transforms)
-        descriptors.append(np.frombuffer(canonical, dtype=np.uint8))
+        # Normalize large values to keep distances balanced
+        descriptors.append(np.array([
+            population / 100.0,  # Normalize population
+            width / 20.0,        # Normalize width
+            height / 20.0,       # Normalize height
+            density              # Density is already 0-1
+        ]))
     
     return descriptors
-
-
-def _to_index_set(arr: np.ndarray) -> set:
-    """Convert array to set of indices (helper for novelty calculation)."""
-    a = np.asarray(arr)
-    if a.size == 0:
-        return set()
-    if a.ndim != 1:
-        a = a.ravel()
-    nz = np.nonzero(a)[0]
-    return set(map(int, nz))
-
-
-def _jaccard_set(a: set, b: set) -> float:
-    """Compute Jaccard distance between two sets (helper for novelty calculation)."""
-    if not a and not b:
-        return 0.0
-    inter = len(a & b)
-    union = len(a | b)
-    if union == 0:
-        return 0.0
-    return 1.0 - (inter / union)
 
 
 def novelty_batch(
@@ -183,10 +159,10 @@ def novelty_batch(
 ) -> np.ndarray:
     """
     Compute novelty scores for a batch of descriptors.
-    Uses Jaccard distance for efficiency.
+    Uses Euclidean distance to match CGOL_Problem.novelty implementation.
     
     Args:
-        descriptors: List of descriptor arrays
+        descriptors: List of descriptor arrays (feature vectors)
         archive: List of archive descriptor arrays
         k: Number of nearest neighbors
         device: PyTorch device (unused, kept for API compatibility)
@@ -194,35 +170,34 @@ def novelty_batch(
     Returns:
         Array of novelty scores
     """
+    from scipy.spatial.distance import cdist
+    
     novelties = []
     
     for desc in descriptors:
-        # Convert primary descriptor -> index set
-        desc_set = _to_index_set(desc)
+        # Combine archive and current population for the comparison pool
+        pool = np.array(archive + descriptors)
         
-        # Build pool of sets (population followed by archive)
-        pool_arrays = list(descriptors) + list(archive)
-        pool_sets = [_to_index_set(p) for p in pool_arrays]
+        if len(pool) == 0:
+            novelties.append(0.0)
+            continue
         
-        # Compute distances but exclude exactly one self-match (if present).
-        dists = []
-        self_skipped = False
-        for other in pool_sets:
-            if (other == desc_set) and (not self_skipped):
-                # skip the first exact-equal match (treating that as self)
-                self_skipped = True
-                continue
-            d = _jaccard_set(desc_set, other)
-            dists.append(d)
+        # Calculate Euclidean distances from 'desc' to everyone in 'pool'
+        dists = cdist(desc.reshape(1, -1), pool, metric='euclidean')[0]
         
-        if len(dists) == 0:
-            # No neighbors to compare to
+        # Sort distances
+        dists_sorted = np.sort(dists)
+        
+        # Filter out zero distances (self-matches) - take first k non-zero if available
+        non_zero_dists = dists_sorted[dists_sorted > 1e-10]
+        
+        if len(non_zero_dists) == 0:
+            # All distances are zero (only self in pool)
             novelty = 0.0
         else:
             # Use up to k nearest neighbors
-            k_eff = min(k, len(dists))
-            dists.sort()
-            novelty = float(sum(dists[:k_eff]) / k_eff)
+            k_eff = min(k, len(non_zero_dists))
+            novelty = float(np.mean(non_zero_dists[:k_eff]))
         
         novelties.append(novelty)
     

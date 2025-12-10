@@ -129,12 +129,17 @@ def main():
         action="store_true",
         help="Save simulation state to file (saved_state.npz)"
     )
-    
+
     args = parser.parse_args()
-    
+
+    # Print all args
+    print("Parsed arguments:")
+    for arg, value in vars(args).items():
+        print(f"  {arg}: {value}")
+
     initial = create_initial_state(args.initial_state)
     print(f"Initial live cells: {np.sum(initial)}")
-    
+
     print(f"Running {args.search_type}, {args.steps} steps")
     print(f"Expansion: {'infinite' if args.expansion == -1 else args.expansion}")
 
@@ -168,7 +173,6 @@ def main():
         initial = hill_climbing(
             problem=problem,
             parameters=parameters,
-            use_cuda=use_cuda,
         )[-1]
     elif args.search_type == "GA":
         initial = genetic_algorithm(
@@ -183,16 +187,13 @@ def main():
             use_cuda=use_cuda,
         )[-1]
 
-    # Use batch simulation even for single state (batch_size=1)
-    from pytorch_parallel import simulate_batch
-    sim_device = device if device is not None else (get_device() if use_cuda and torch.cuda.is_available() else torch.device("cpu"))
+    # For visualization, we need intermediate states, so use the non-batch simulation
     # Ensure initial is a numpy array (search algorithms may return lists)
     if isinstance(initial, list):
         initial = np.array(initial, dtype=np.uint8)
-    initial_tensor = torch.from_numpy(initial.reshape(1, -1)).to(sim_device)
-    final_state = simulate_batch(initial_tensor, parameters, sim_device)
-    # Convert to list format for visualization compatibility
-    log = [final_state[0].cpu().numpy()]
+    
+    # Use CGOL_Problem.simulate to get the full sequence for visualization
+    log = CGOL_Problem.simulate(initial, parameters)
     
     # End timing here
     end_time = time.perf_counter()
@@ -217,6 +218,7 @@ def main():
         print(f"State saved to {filename}")
 
     if args.visualize:
+        print("Visualizing...")
         viz = GameVisualizer(grid_width=args.grid_width, delay=args.delay)
         
         try:

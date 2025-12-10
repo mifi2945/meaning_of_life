@@ -16,7 +16,6 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
 
     :param problem: Local Search Problem Object.
     :param parameters: Simulation parameters.
-    :param use_cuda: Whether to use CUDA if available (default: True).
     :return: Returns a list of the best states (as evaluated using value()) at each epoch.
 
     *notes:
@@ -27,7 +26,7 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
     new_params = copy.deepcopy(parameters)
     new_params.include_between = False
 
-    device = get_device() if use_cuda else torch.device("cpu")
+    device = get_device()
     
     # Determine problem type for fitness evaluation
     problem_type = problem.type

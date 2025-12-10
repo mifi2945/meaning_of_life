@@ -86,9 +86,9 @@ def novelty_search_with_quality(problem:CGOL_Problem,
                                 novelty_threshold:float=1,
                                 quality_threshold:float=10,
                                 archive_max:int=300,
-                                novelty_weight:float=0.3): # Changed int to float for consistency
+                                novelty_weight:float=0.3):
     """
-    NS-Q: Novelty Search with Quality (Elitism Implemented).
+    NS-Q: Novelty Search with Quality (elitism implemented).
 
     This algorithm uses a weighted combination of Novelty and Quality (Fitness)
     for selection and population replacement.
@@ -226,121 +226,3 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         combined_scores = np.array([full_comb[i] for i in best_idx])        
         
     return best_states
-# def novelty_search_with_quality(problem:CGOL_Problem,
-#                                 parameters:Parameters,
-#                                 pop_size:int=100,
-#                                 num_epochs:int=100,
-#                                 k:int=10,
-#                                 novelty_threshold:float=0.5,
-#                                 quality_threshold:float=0.2,
-#                                 archive_max:int=500,
-#                                 novelty_weight:float=0.5):
-#     """
-#     NS-Q: novelty + quality
-#     """
-
-#     new_params = copy.deepcopy(parameters)
-#     new_params.include_between = False
-
-#     population = [problem.state_generator(problem.type) for _ in range(pop_size)]
-#     archive = []
-
-#     final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
-
-#     # initial eval
-#     descriptors = [problem.behavior_descriptor(ind, new_params)
-#                    for ind in final_states]
-#     novelties = [
-#         problem.novelty(desc, archive, descriptors, k)
-#         for desc in descriptors
-#     ]
-#     qualities = [problem.value(ind, new_params) for ind in final_states]
-
-#     best_states = [population[np.argmax(qualities)]]
-
-#     # initial archive update
-#     for desc, n, q in zip(descriptors, novelties, qualities):
-#         if n >= novelty_threshold and q >= quality_threshold:
-#             archive.append(desc)
-
-#     for epoch in range(num_epochs):
-
-#         # selection
-#         combined = novelty_weight * np.array(novelties) + \
-#                    (1 - novelty_weight) * np.array(qualities)
-#         probs = combined + 1e-6
-#         probs /= probs.sum()
-
-#         indices = np.random.choice(len(population), size=pop_size, p=probs)
-#         parents = [population[i] for i in indices]
-
-#         # offspring
-#         offspring = []
-#         for _ in range(len(population)-1): # account for elite
-#             # p1, p2 = np.random.choice(parents, 2, replace=True)
-#             i1, i2 = np.random.choice(len(parents), 2, replace=True)
-#             p1, p2 = population[i1], population[i2]
-#             child = problem.crossover(p1, p2)
-#             if np.random.rand() < 0.5:
-#                 child = problem.mutate(child)
-#             offspring.append(child)
-
-#         final_offs = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in offspring]
-#         # eval offspring
-#         offspring_desc = [problem.behavior_descriptor(ind, new_params)
-#                             for ind in final_offs]
-
-#         offspring_novel = [
-#             problem.novelty(desc, archive, offspring_desc, k)
-#             for desc in offspring_desc
-#         ]
-        
-
-#         offspring_quality = [
-#             problem.value(ind, new_params) for ind in final_offs
-#         ]
-
-#         best_states.append(offspring[np.argmax(offspring_quality)])
-
-#         # ----------------------------
-#         # Archive update
-#         # ----------------------------
-#         for desc, n, q in zip(offspring_desc, offspring_novel, offspring_quality):
-#             if n >= novelty_threshold and q >= quality_threshold:
-#                 archive.append(desc)
-
-#         # TODO update based on BOTH novelty and quality
-#         if len(archive) > archive_max:
-#             # remove least novel
-#             combined_ofs = novelty_weight * np.array(offspring_novel) + \
-#                (1 - novelty_weight) * np.array(offspring_quality)
-
-#             idx = np.argsort(combined_ofs)[::-1]  # highest combined score
-#             archive = [archive[i] for i in idx[:archive_max]]
-#             # idx = np.argsort(offspring_novel)[::-1]
-#             # archive = [archive[i] for i in idx[:archive_max]]
-
-#         # ----------------------------
-#         # Replace population
-#         # Replace worst NS-Q individuals with offspring
-#         # ----------------------------
-#         old_comb = combined
-#         new_comb = novelty_weight * np.array(offspring_novel) + \
-#                    (1 - novelty_weight) * np.array(offspring_quality)
-
-#         # choose best pop_size individuals from old+new
-#         full_pop = population + offspring
-#         full_desc = descriptors + offspring_desc
-#         full_nov = novelties + offspring_novel
-#         full_qual = qualities + offspring_quality
-
-#         full_comb = np.concatenate([old_comb, new_comb])
-
-#         best_idx = np.argsort(full_comb)[-pop_size:]
-#         population = [full_pop[i] for i in best_idx]
-#         descriptors = [full_desc[i] for i in best_idx]
-#         novelties = [full_nov[i] for i in best_idx]
-#         qualities = [full_qual[i] for i in best_idx]
-
-#     # return 
-#     return best_states

@@ -255,8 +255,6 @@ class CGOL_Problem(Problem):
     
     def behavior_descriptor(self, final_state: np.ndarray, parameters: Parameters) -> np.ndarray:
         """
-        Extracts a fixed-length feature vector representing the phenotype of the organism.
-        
         Features:
         1. Population Count (normalized)
         2. Bounding Box Width (normalized)
@@ -281,10 +279,10 @@ class CGOL_Problem(Problem):
         # Normalize large values to keep distances balanced
         # Assuming typical grid sizes, dividing helps keep Euclidean distance meaningful
         return np.array([
-            population / 100.0,  # Normalize population
-            width / 20.0,        # Normalize width
-            height / 20.0,       # Normalize height
-            density              # Density is already 0-1
+            population / 100.0,
+            width / 20.0,
+            height / 20.0,
+            density
         ])
 
 
@@ -293,7 +291,7 @@ class CGOL_Problem(Problem):
             population_descriptors: List[np.ndarray],
             k: int = 10) -> float:
         """
-        Calculates the sparsity of the behavior in the behavior space using k-Nearest Neighbors.
+        Calculates the novelty using KNN Euclidean metric
         
         Args:
             descriptor: The behavior vector of the individual being evaluated.
@@ -304,28 +302,18 @@ class CGOL_Problem(Problem):
         Returns:
             The average Euclidean distance to the k-nearest neighbors.
         """
-        # 1. Combine archive and current population for the comparison pool
-        # We filter out the individual's own descriptor if it exists strictly in the list 
-        # (handled by sorting distances, 0 distance usually implies self if strictly equal)
         pool = np.array(archive + population_descriptors)
         
         if len(pool) == 0:
             return 0.0
-
-        # 2. Calculate Euclidean distances from 'descriptor' to everyone in 'pool'
-        # cdist expects 2D arrays, so we reshape descriptor to (1, D)
-        dists = cdist(descriptor.reshape(1, -1), pool, metric='euclidean')[0]
         
-        # 3. Sort distances
+        dists = cdist(descriptor.reshape(1, -1), pool, metric='euclidean')[0]
         dists.sort()
         
-        # 4. Remove exact duplicate (distance 0) if it is the individual itself
-        # In a generic implementation, we usually skip the first element if it's 0.0 
-        # because that is the distance to itself in the population list.
+        # remove exact duplicate (distance 0) if it is the individual itself
         if dists[0] == 0.0 and len(dists) > 1:
             dists = dists[1:]
             
-        # 5. Compute average distance to k nearest neighbors
         k_eff = min(k, len(dists))
         if k_eff == 0:
             return 0.0
@@ -435,9 +423,7 @@ class CGOL_Problem(Problem):
 class GrowthProblem(CGOL_Problem):
     def value(self, state: np.ndarray, parameters: Parameters) -> float:
         """
-        Ratio of total alive over total cells on board
-        We want to reduce spread of cells as well (one larger clump preferred)
-        This is evaluated AFTER the board is simulated
+        Sum of all alive cells on the grid
         """
         alive = np.sum(state)
         return float(alive)
@@ -457,14 +443,14 @@ class MigrationProblem(CGOL_Problem):
         if len(rows) == 0:
             return 0.0
             
-        # Calculate Center of Mass
+        # object center
         avg_r = np.mean(rows)
         avg_c = np.mean(cols)
         
-        # Grid Center
+        # grid center
         center_r, center_c = state.shape[0] / 2, state.shape[1] / 2
         
-        # Euclidean distance from center
+        # distance from center
         dist = np.sqrt((avg_r - center_r)**2 + (avg_c - center_c)**2)
         
         return float(dist)

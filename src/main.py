@@ -1,10 +1,10 @@
 import argparse
 import numpy as np
 import torch
+import time
 from visualizer import GameVisualizer
 from algorithms import (
-    hill_climbing, genetic_algorithm, novelty_search_with_quality,
-    genetic_algorithm_parallel, novelty_search_with_quality_parallel
+    hill_climbing, genetic_algorithm, novelty_search_with_quality
 )
 from pytorch_parallel import get_device
 from problems import Parameters
@@ -93,9 +93,9 @@ def main():
         "-a", "--search-type",
         type=str,
         default="default",
-        choices=["default", "hill_climbing", "GA", "NS_Q", "GA_parallel", "NS_Q_parallel"],
+        choices=["default", "hill_climbing", "GA", "NS_Q"],
         help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm, " \
-        "'NS_Q' for Novelty Search, 'GA_parallel' for parallelized GA, 'NS_Q_parallel' for parallelized NS-Q"
+        "'NS_Q' for Novelty Search (all use CUDA/GPU acceleration when available)"
     )
     
     parser.add_argument(
@@ -110,6 +110,12 @@ def main():
         default="growth",
         choices=["growth", "migration"],
         help="Problem type to solve: 'growth' for growth problem, 'migration' for migration problem (default: growth)"
+    )
+    
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save simulation state to file (saved_state.npz)"
     )
     
     args = parser.parse_args()
@@ -143,38 +149,60 @@ def main():
         device = None
         print("Using CPU")
     
+    # Start timing here
+    start_time = time.perf_counter()
+
     if args.search_type == "hill_climbing":
         initial = hill_climbing(
             problem=problem,
             parameters=parameters,
+            use_cuda=use_cuda,
         )
     elif args.search_type == "GA":
         initial = genetic_algorithm(
             problem=problem,
             parameters=parameters,
+            use_cuda=use_cuda,
         )[-1]
     elif args.search_type == "NS_Q":
         initial = novelty_search_with_quality(
             problem=problem,
             parameters=parameters,
-        )[-1]
-    elif args.search_type == "GA_parallel":
-        initial = genetic_algorithm_parallel(
-            problem=problem,
-            parameters=parameters,
-            use_cuda=use_cuda,
-        )[-1]
-    elif args.search_type == "NS_Q_parallel":
-        initial = novelty_search_with_quality_parallel(
-            problem=problem,
-            parameters=parameters,
             use_cuda=use_cuda,
         )[-1]
 
-    log = CGOL_Problem.simulate(
-        initial=initial,
-        parameters=parameters
-    )
+    # Use batch simulation even for single state (batch_size=1)
+    from pytorch_parallel import simulate_batch
+    sim_device = device if device is not None else (get_device() if use_cuda and torch.cuda.is_available() else torch.device("cpu"))
+    # Ensure initial is a numpy array (search algorithms may return lists)
+    if isinstance(initial, list):
+        initial = np.array(initial, dtype=np.uint8)
+    initial_tensor = torch.from_numpy(initial.reshape(1, -1)).to(sim_device)
+    final_state = simulate_batch(initial_tensor, parameters, sim_device)
+    # Convert to list format for visualization compatibility
+    log = [final_state[0].cpu().numpy()]
+    
+    # End timing here
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
+    print(f"Simulation time: {elapsed:.3f} seconds")
+
+    # Save state if requested
+    if args.save:
+        import os
+        filename = "saved_state.npz"
+        # Convert log to numpy array for saving
+        states_array = np.array(log) if len(log) > 1 else np.array([log[0]])
+        np.savez_compressed(
+            filename,
+            states=states_array,
+            initial_state=initial,
+            steps=parameters.steps,
+            expansion=parameters.expansion,
+            search_type=args.search_type,
+            problem_type=args.problem_type
+        )
+        print(f"State saved to {filename}")
 
     if args.visualize:
         viz = GameVisualizer(grid_width=args.grid_width, delay=args.delay)
@@ -183,8 +211,6 @@ def main():
             viz.display_sequence(log)
         finally:
             viz.quit()
-    else:
-        print("\nVisualization disabled (--no-display)")
 
     print(f"Final state: {log[-1].shape[0]}x{log[-1].shape[1]} grid")
     print(f"Final live cells: {np.sum(log[-1])}")

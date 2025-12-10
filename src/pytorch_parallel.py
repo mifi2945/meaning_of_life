@@ -1,7 +1,4 @@
-"""
-PyTorch/CUDA parallelized operations for Conway's Game of Life algorithms.
-This module provides batched operations to accelerate GA and NS-Q algorithms.
-"""
+# Usa da Cuda
 import torch
 import numpy as np
 from typing import List, Tuple
@@ -9,7 +6,6 @@ from problems import Parameters
 
 
 def get_device():
-    """Get the best available device (CUDA if available, else CPU)."""
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -18,18 +14,6 @@ def simulate_batch(
     parameters: Parameters,
     device: torch.device = None
 ) -> torch.Tensor:
-    """
-    Fully batched simulation of Conway's Game of Life using PyTorch.
-    Processes all batch items in parallel using vectorized operations.
-    
-    Args:
-        initial_states: Array or tensor of shape (batch_size, state_size) where state_size is a perfect square
-        parameters: Simulation parameters
-        device: PyTorch device (auto-detected if None)
-    
-    Returns:
-        Final states as torch.Tensor of shape (batch_size, grid_h, grid_w)
-    """
     if device is None:
         device = get_device()
     
@@ -169,6 +153,28 @@ def behavior_descriptor_batch(
     return descriptors
 
 
+def _to_index_set(arr: np.ndarray) -> set:
+    """Convert array to set of indices (helper for novelty calculation)."""
+    a = np.asarray(arr)
+    if a.size == 0:
+        return set()
+    if a.ndim != 1:
+        a = a.ravel()
+    nz = np.nonzero(a)[0]
+    return set(map(int, nz))
+
+
+def _jaccard_set(a: set, b: set) -> float:
+    """Compute Jaccard distance between two sets (helper for novelty calculation)."""
+    if not a and not b:
+        return 0.0
+    inter = len(a & b)
+    union = len(a | b)
+    if union == 0:
+        return 0.0
+    return 1.0 - (inter / union)
+
+
 def novelty_batch(
     descriptors: List[np.ndarray],
     archive: List[np.ndarray],
@@ -183,18 +189,41 @@ def novelty_batch(
         descriptors: List of descriptor arrays
         archive: List of archive descriptor arrays
         k: Number of nearest neighbors
-        device: PyTorch device
+        device: PyTorch device (unused, kept for API compatibility)
     
     Returns:
         Array of novelty scores
     """
-    from problems import CGOL_Problem
-    
-    problem = CGOL_Problem(state_generator=lambda: np.zeros(100, dtype=np.uint8))
-    
     novelties = []
+    
     for desc in descriptors:
-        novelty = problem.novelty(desc, archive, descriptors, k)
+        # Convert primary descriptor -> index set
+        desc_set = _to_index_set(desc)
+        
+        # Build pool of sets (population followed by archive)
+        pool_arrays = list(descriptors) + list(archive)
+        pool_sets = [_to_index_set(p) for p in pool_arrays]
+        
+        # Compute distances but exclude exactly one self-match (if present).
+        dists = []
+        self_skipped = False
+        for other in pool_sets:
+            if (other == desc_set) and (not self_skipped):
+                # skip the first exact-equal match (treating that as self)
+                self_skipped = True
+                continue
+            d = _jaccard_set(desc_set, other)
+            dists.append(d)
+        
+        if len(dists) == 0:
+            # No neighbors to compare to
+            novelty = 0.0
+        else:
+            # Use up to k nearest neighbors
+            k_eff = min(k, len(dists))
+            dists.sort()
+            novelty = float(sum(dists[:k_eff]) / k_eff)
+        
         novelties.append(novelty)
     
     return np.array(novelties)

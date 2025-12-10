@@ -1,5 +1,6 @@
 from __future__ import annotations  # needed in order to reference a Class within itself
 from random import randint, random, choice, choices
+from selectors import SelectorKey
 from typing import Callable, List
 from abc import ABC, abstractmethod
 import numpy as np
@@ -52,10 +53,53 @@ class CGOL_Problem(Problem):
 
     Implements for Conway's Game of Life, with a list of values representing the 20x20 space.
     """
+    # Pattern definitions
+    BLINKER = np.array([
+        0, 0, 0,
+        1, 1, 1,
+        0, 0, 0
+    ], dtype=np.uint8)
+    
+    GLIDER = np.array([
+        0, 0, 0, 0, 0,
+        0, 0, 1, 0, 0,
+        0, 0, 0, 1, 0,
+        0, 1, 1, 1, 0,
+        0, 0, 0, 0, 0
+    ], dtype=np.uint8)
+    
+    TOAD = np.array([
+        0, 0, 0, 0,
+        0, 1, 1, 1,
+        1, 1, 1, 0,
+        0, 0, 0, 0
+    ], dtype=np.uint8)
+
+    SUSTAIN_1 = np.array([
+        0, 1, 0,
+        1, 0, 1,
+        0, 1, 0
+    ], dtype=np.uint8)
+    
+    SUSTAIN_2 = np.array([
+        0, 1, 0,
+        1, 0, 1,
+        1, 0, 1,
+        0, 1, 0
+    ], dtype=np.uint8)
+
+    
     def __init__(self, state_generator: Callable[[], np.ndarray], type: str = "random"):
         self.initial_state = state_generator(type)
         self.state_generator = state_generator
         self.type = type
+        self.patterns = {
+            'blinker': self.BLINKER,
+            'glider': self.GLIDER,
+            'toad': self.TOAD,
+            'sustain_1': self.SUSTAIN_1,
+            'sustain_2': self.SUSTAIN_2
+        }
 
 
     @staticmethod
@@ -144,34 +188,67 @@ class CGOL_Problem(Problem):
         return log
 
 
-    def actions(self, curr_state: np.ndarray) -> list[int]:
+    def actions(self, curr_state: np.ndarray) -> list:
         """
         Actions that can be applied to a CGoL board.
-        We can technically set multiple cells at a time, but we will limit to one per epoch.
+        Returns both single bit flips and pattern placements.
+        
+        Action format:
+        - For bit flips: int (cell index)
+        - For patterns: tuple ('pattern_name', row, col) where row/col is top-left position
 
         Args:
             curr_state: List values that correspond to the values of the alive/dead cells.
 
-        Returns: List of cells that can be set.
+        Returns: List of actions (bit flips + pattern placements).
 
         """
-        return [i for i in range(len(curr_state))]
+        actions = []
+        # Single bit flips (most granular)
+        actions.extend([i for i in range(len(curr_state))])
+        
+        # Pattern placements
+        length = int(np.sqrt(len(curr_state)))
+        for pattern_name, pattern in self.patterns.items():
+            pattern_size = int(np.sqrt(len(pattern)))
+            max_pos = length - pattern_size + 1
+            for row in range(max_pos):
+                for col in range(max_pos):
+                    actions.append((pattern_name, row, col))
+        
+        return actions
 
-    def result(self, curr_state: np.ndarray, action:int) -> np.ndarray:
+    def result(self, curr_state: np.ndarray, action) -> np.ndarray:
         """
-        Sets corresponding cell in the state.
-
+        Applies an action to the state.
+        
         Args:
             curr_state: List values that correspond to the values of the alive/dead cells.
-            action: the index to set.
+            action: Either:
+                   - int: index to flip (single bit flip)
+                   - tuple: ('pattern_name', row, col) to place a pattern
 
         Returns: the next state representation after the given action is performed.
 
         """
         next_state = curr_state.copy()
-        next_state[action] ^= 1     # XOR toggle the cell
-
-        return next_state
+        length = int(np.sqrt(len(curr_state)))
+        next_state_2d = next_state.reshape((length, length))
+        
+        if isinstance(action, int):
+            # Single bit flip (most granular)
+            next_state[action] ^= 1
+        elif isinstance(action, tuple):
+            # Pattern placement
+            pattern_name, row, col = action
+            pattern = self.patterns[pattern_name]
+            pattern_size = int(np.sqrt(len(pattern)))
+            pattern_2d = pattern.reshape((pattern_size, pattern_size))
+            
+            # Place pattern using XOR (so overlapping patterns toggle)
+            next_state_2d[row:row+pattern_size, col:col+pattern_size] ^= pattern_2d
+        
+        return next_state_2d.flatten()
     
     def behavior_descriptor(self, final_state: np.ndarray, parameters: Parameters) -> np.ndarray:
         """
@@ -312,13 +389,43 @@ class CGOL_Problem(Problem):
         # Concatenate arrays instead of tuple slicing
         return np.concatenate([parent1[:c], parent2[c:]])
     
-    def mutate(self, child: np.ndarray) -> np.ndarray:
+    def mutate(self, child: np.ndarray, pattern_prob: float = 0.3) -> np.ndarray:
         """
-        Mutate randomly by flipping any random bit
+        Mutate by either:
+        - Flipping a random bit (most granular, default 70% chance)
+        - Placing a random pattern (30% chance by default)
+        
+        Args:
+            child: State to mutate
+            pattern_prob: Probability of using pattern mutation instead of bit flip (default 0.3)
+        
+        Returns: Mutated state
         """
-        index = randint(0,len(child)-1)
         mutation = child.copy()
-        mutation[index] ^= 1    # XOR flips the bit
+        length = int(np.sqrt(len(child)))
+        
+        if np.random.rand() < pattern_prob and len(self.patterns) > 0:
+            # Pattern mutation: place a random pattern at a random position
+            pattern_name = np.random.choice(list(self.patterns.keys()))
+            pattern = self.patterns[pattern_name]
+            pattern_size = int(np.sqrt(len(pattern)))
+            
+            # Random position (top-left corner of pattern)
+            max_pos = max(0, length - pattern_size + 1)
+            if max_pos > 0:
+                row = randint(0, max_pos - 1)
+                col = randint(0, max_pos - 1)
+                
+                # Place pattern using XOR
+                mutation_2d = mutation.reshape((length, length))
+                pattern_2d = pattern.reshape((pattern_size, pattern_size))
+                mutation_2d[row:row+pattern_size, col:col+pattern_size] ^= pattern_2d
+                mutation = mutation_2d.flatten()
+        else:
+            # Bit flip mutation (most granular)
+            index = randint(0, len(child) - 1)
+            mutation[index] ^= 1
+        
         return mutation
 
 

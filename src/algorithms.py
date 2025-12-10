@@ -117,7 +117,6 @@ def novelty_search_with_quality(problem:CGOL_Problem,
             archive.append(desc)
 
     for epoch in range(num_epochs):
-
         # selection
         combined = novelty_weight * np.array(novelties) + \
                    (1 - novelty_weight) * np.array(qualities)

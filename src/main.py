@@ -8,7 +8,7 @@ from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
 from visualizer import DELAY, GRID_WIDTH
 
 
-def create_initial_state(type:str = 'empty') -> np.ndarray:
+def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
 
     death = np.array([
         0, 0, 0,
@@ -37,8 +37,8 @@ def create_initial_state(type:str = 'empty') -> np.ndarray:
         0, 0, 0, 0
     ], dtype=np.uint8)
     
-    rando = np.random.randint(0, 2, size=100, dtype=np.uint8)
-    empty = np.zeros(100, dtype=np.uint8)
+    rando = np.random.randint(0, 2, size=size, dtype=np.uint8)
+    empty = np.zeros(size, dtype=np.uint8)
 
     if type == 'empty':
         return empty

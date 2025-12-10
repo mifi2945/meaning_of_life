@@ -8,7 +8,7 @@ from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
 from visualizer import DELAY, GRID_WIDTH
 
 
-def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
+def create_initial_state(type:str = 'empty', size:int = 400) -> np.ndarray:
 
     death = np.array([
         0, 0, 0,
@@ -38,7 +38,7 @@ def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
     ], dtype=np.uint8)
     
     # Create random grid with 31% probability of being alive
-    rando = (np.random.rand(size) < 0.31).astype(np.uint8)
+    rando = (np.random.rand(size) < 0.51).astype(np.uint8)
     empty = np.zeros(size, dtype=np.uint8)
 
     if type == 'empty':
@@ -115,6 +115,13 @@ def main():
     )
     
     parser.add_argument(
+        "--grid-size",
+        type=int,
+        default=20,
+        help="Initial grid size (NxN). Default: 20 (20x20 = 400 cells)"
+    )
+    
+    parser.add_argument(
         "--no-presets",
         dest="presets",
         action="store_false",
@@ -124,7 +131,8 @@ def main():
     
     args = parser.parse_args()
     
-    initial = create_initial_state(args.initial_state)
+    grid_size = args.grid_size * args.grid_size  # Convert to total number of cells
+    initial = create_initial_state(args.initial_state, size=grid_size)
     print(f"Initial live cells: {np.sum(initial)}")
     
     print(f"Running {args.search_type}, {args.steps} steps")
@@ -137,15 +145,19 @@ def main():
     )
 
     quality_threshold = 0
+    # Create a wrapper function that uses the correct grid size
+    def state_generator_with_size(type: str) -> np.ndarray:
+        return create_initial_state(type, size=grid_size)
+    
     # Create the appropriate problem instance based on problem type
     if args.problem_type == "growth":
-        problem = GrowthProblem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
+        problem = GrowthProblem(state_generator=state_generator_with_size, type=args.initial_state, enable_presets=args.presets)
         quality_threshold = 200
     elif args.problem_type == "migration":
-        problem = MigrationProblem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
+        problem = MigrationProblem(state_generator=state_generator_with_size, type=args.initial_state, enable_presets=args.presets)
         quality_threshold = 20
     else:
-        problem = CGOL_Problem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
+        problem = CGOL_Problem(state_generator=state_generator_with_size, type=args.initial_state, enable_presets=args.presets)
 
     if args.search_type == "hill_climbing":
         initial = hill_climbing(
@@ -181,7 +193,15 @@ def main():
         print("\nVisualization disabled (--no-display)")
 
     print(f"Final state: {log[-1].shape[0]}x{log[-1].shape[1]} grid")
-    print(f"Final live cells: {np.sum(log[-1])}")
+    
+    # Print problem-specific value
+    final_value = problem.value(log[-1], parameters)
+    if args.problem_type == "growth":
+        print(f"Final value (alive cells): {final_value:.1f}")
+    elif args.problem_type == "migration":
+        print(f"Final value (distance from center): {final_value:.2f}")
+    else:
+        print(f"Final value: {final_value:.2f}")
 
 
 if __name__ == '__main__':

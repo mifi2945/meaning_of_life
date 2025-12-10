@@ -446,6 +446,10 @@ class MigrationProblem(CGOL_Problem):
         Quality Metric: Distance of Center of Mass from Grid Center.
         Higher (further) is better.
         """
+        if len(state.shape) < 2:
+            length = int(np.sqrt(len(state)))
+            state = state.reshape((length,length))
+
         rows, cols = np.where(state == 1)
         if len(rows) == 0:
             return 0.0

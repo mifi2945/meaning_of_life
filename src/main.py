@@ -37,7 +37,8 @@ def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
         0, 0, 0, 0
     ], dtype=np.uint8)
     
-    rando = np.random.randint(0, 2, size=size, dtype=np.uint8)
+    # Create random grid with 31% probability of being alive
+    rando = (np.random.rand(size) < 0.31).astype(np.uint8)
     empty = np.zeros(size, dtype=np.uint8)
 
     if type == 'empty':
@@ -113,6 +114,14 @@ def main():
         help="Initial state generation: 'random' for random start, 'empty' for an empty initial state"
     )
     
+    parser.add_argument(
+        "--no-presets",
+        dest="presets",
+        action="store_false",
+        default=True,
+        help="Disable pattern presets (only use single bit flips). By default, presets are enabled."
+    )
+    
     args = parser.parse_args()
     
     initial = create_initial_state(args.initial_state)
@@ -130,13 +139,13 @@ def main():
     quality_threshold = 0
     # Create the appropriate problem instance based on problem type
     if args.problem_type == "growth":
-        problem = GrowthProblem(state_generator=create_initial_state, type=args.initial_state)
+        problem = GrowthProblem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
         quality_threshold = 200
     elif args.problem_type == "migration":
-        problem = MigrationProblem(state_generator=create_initial_state, type=args.initial_state)
+        problem = MigrationProblem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
         quality_threshold = 20
     else:
-        problem = CGOL_Problem(state_generator=create_initial_state, type=args.initial_state)
+        problem = CGOL_Problem(state_generator=create_initial_state, type=args.initial_state, enable_presets=args.presets)
 
     if args.search_type == "hill_climbing":
         initial = hill_climbing(

@@ -89,17 +89,21 @@ class CGOL_Problem(Problem):
     ], dtype=np.uint8)
 
     
-    def __init__(self, state_generator: Callable[[], np.ndarray], type: str = "random"):
+    def __init__(self, state_generator: Callable[[], np.ndarray], type: str = "random", enable_presets: bool = True):
         self.initial_state = state_generator(type)
         self.state_generator = state_generator
         self.type = type
-        self.patterns = {
-            'blinker': self.BLINKER,
-            'glider': self.GLIDER,
-            'toad': self.TOAD,
-            'sustain_1': self.SUSTAIN_1,
-            'sustain_2': self.SUSTAIN_2
-        }
+        # Store patterns with their dimensions (only if presets are enabled)
+        if enable_presets:
+            self.patterns = {
+                'blinker': (self.BLINKER, 3, 3),      # 3x3
+                'glider': (self.GLIDER, 5, 5),        # 5x5
+                'toad': (self.TOAD, 4, 4),            # 4x4
+                'sustain_1': (self.SUSTAIN_1, 3, 3),  # 3x3
+                'sustain_2': (self.SUSTAIN_2, 4, 3)   # 4x3 (rectangular)
+            }
+        else:
+            self.patterns = {}
 
 
     @staticmethod
@@ -209,11 +213,11 @@ class CGOL_Problem(Problem):
         
         # Pattern placements
         length = int(np.sqrt(len(curr_state)))
-        for pattern_name, pattern in self.patterns.items():
-            pattern_size = int(np.sqrt(len(pattern)))
-            max_pos = length - pattern_size + 1
-            for row in range(max_pos):
-                for col in range(max_pos):
+        for pattern_name, (pattern, pattern_h, pattern_w) in self.patterns.items():
+            max_row = length - pattern_h + 1
+            max_col = length - pattern_w + 1
+            for row in range(max_row):
+                for col in range(max_col):
                     actions.append((pattern_name, row, col))
         
         return actions
@@ -241,12 +245,11 @@ class CGOL_Problem(Problem):
         elif isinstance(action, tuple):
             # Pattern placement
             pattern_name, row, col = action
-            pattern = self.patterns[pattern_name]
-            pattern_size = int(np.sqrt(len(pattern)))
-            pattern_2d = pattern.reshape((pattern_size, pattern_size))
+            pattern, pattern_h, pattern_w = self.patterns[pattern_name]
+            pattern_2d = pattern.reshape((pattern_h, pattern_w))
             
             # Place pattern using XOR (so overlapping patterns toggle)
-            next_state_2d[row:row+pattern_size, col:col+pattern_size] ^= pattern_2d
+            next_state_2d[row:row+pattern_h, col:col+pattern_w] ^= pattern_2d
         
         return next_state_2d.flatten()
     
@@ -407,19 +410,19 @@ class CGOL_Problem(Problem):
         if np.random.rand() < pattern_prob and len(self.patterns) > 0:
             # Pattern mutation: place a random pattern at a random position
             pattern_name = np.random.choice(list(self.patterns.keys()))
-            pattern = self.patterns[pattern_name]
-            pattern_size = int(np.sqrt(len(pattern)))
+            pattern, pattern_h, pattern_w = self.patterns[pattern_name]
             
             # Random position (top-left corner of pattern)
-            max_pos = max(0, length - pattern_size + 1)
-            if max_pos > 0:
-                row = randint(0, max_pos - 1)
-                col = randint(0, max_pos - 1)
+            max_row = max(0, length - pattern_h + 1)
+            max_col = max(0, length - pattern_w + 1)
+            if max_row > 0 and max_col > 0:
+                row = randint(0, max_row - 1)
+                col = randint(0, max_col - 1)
                 
                 # Place pattern using XOR
                 mutation_2d = mutation.reshape((length, length))
-                pattern_2d = pattern.reshape((pattern_size, pattern_size))
-                mutation_2d[row:row+pattern_size, col:col+pattern_size] ^= pattern_2d
+                pattern_2d = pattern.reshape((pattern_h, pattern_w))
+                mutation_2d[row:row+pattern_h, col:col+pattern_w] ^= pattern_2d
                 mutation = mutation_2d.flatten()
         else:
             # Bit flip mutation (most granular)

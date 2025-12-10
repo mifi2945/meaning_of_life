@@ -82,7 +82,7 @@ class GameVisualizer:
                 (x, self.win.get_height())
             )
     
-    def display_sequence(self, grids: List[np.ndarray], auto_advance: bool = True):
+    def display_sequence(self, grids: List[np.ndarray], auto_advance: bool = False):
         self._fit_to_grid(grids[0].shape[0])
         
         running = True

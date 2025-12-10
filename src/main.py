@@ -127,11 +127,14 @@ def main():
         expansion=args.expansion
     )
 
+    quality_threshold = 0
     # Create the appropriate problem instance based on problem type
     if args.problem_type == "growth":
         problem = GrowthProblem(state_generator=create_initial_state, type=args.initial_state)
+        quality_threshold = 200
     elif args.problem_type == "migration":
         problem = MigrationProblem(state_generator=create_initial_state, type=args.initial_state)
+        quality_threshold = 20
     else:
         problem = CGOL_Problem(state_generator=create_initial_state, type=args.initial_state)
 
@@ -144,11 +147,13 @@ def main():
         initial = genetic_algorithm(
             problem=problem,
             parameters=parameters,
+            quality_threshold=quality_threshold
         )[-1]
     elif args.search_type == "NS_Q":
         initial = novelty_search_with_quality(
             problem=problem,
             parameters=parameters,
+            quality_threshold=quality_threshold
         )[-1]
 
     log = CGOL_Problem.simulate(

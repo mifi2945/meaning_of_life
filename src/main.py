@@ -13,7 +13,7 @@ from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
 from visualizer import DELAY, GRID_WIDTH
 
 
-def create_initial_state() -> np.ndarray:
+def create_initial_state(type:str = 'empty') -> np.ndarray:
 
     death = np.array([
         0, 0, 0,
@@ -43,8 +43,12 @@ def create_initial_state() -> np.ndarray:
     ], dtype=np.uint8)
     
     rando = np.random.randint(0, 2, size=100, dtype=np.uint8)
-    
-    return rando
+    empty = np.zeros(100, dtype=np.uint8)
+
+    if type == 'empty':
+        return empty
+    if type == 'random':
+        return rando
 
 def main():
     parser = argparse.ArgumentParser(
@@ -111,6 +115,14 @@ def main():
         choices=["growth", "migration"],
         help="Problem type to solve: 'growth' for growth problem, 'migration' for migration problem (default: growth)"
     )
+
+    parser.add_argument(
+        "-i", "--initial-state",
+        type=str,
+        default="random",
+        choices=["random", "empty"],
+        help="Initial state generation: 'random' for random start, 'empty' for an empty initial state"
+    )
     
     parser.add_argument(
         "--save",
@@ -120,7 +132,7 @@ def main():
     
     args = parser.parse_args()
     
-    initial = create_initial_state()
+    initial = create_initial_state(args.initial_state)
     print(f"Initial live cells: {np.sum(initial)}")
     
     print(f"Running {args.search_type}, {args.steps} steps")
@@ -134,7 +146,7 @@ def main():
 
     # Create the appropriate problem instance based on problem type
     if args.problem_type == "growth":
-        problem = GrowthProblem(state_generator=create_initial_state)
+        problem = GrowthProblem(state_generator=create_initial_state, type=args.initial_state)
     elif args.problem_type == "migration":
         problem = MigrationProblem(state_generator=create_initial_state)
     else:
@@ -157,7 +169,7 @@ def main():
             problem=problem,
             parameters=parameters,
             use_cuda=use_cuda,
-        )
+        )[-1]
     elif args.search_type == "GA":
         initial = genetic_algorithm(
             problem=problem,

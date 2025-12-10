@@ -52,9 +52,10 @@ class CGOL_Problem(Problem):
 
     Implements for Conway's Game of Life, with a list of values representing the 20x20 space.
     """
-    def __init__(self, state_generator: Callable[[], np.ndarray]):
-        self.initial_state = state_generator()
+    def __init__(self, state_generator: Callable[[], np.ndarray], type: str = "random"):
+        self.initial_state = state_generator(type)
         self.state_generator = state_generator
+        self.type = type
 
 
     @staticmethod
@@ -172,89 +173,84 @@ class CGOL_Problem(Problem):
 
         return next_state
     
-    def behavior_descriptor(self, final, parameters):
-        # final = CGOL_Problem.simulate(state, parameters)[0]
-
-        # 1. Extract bounding box of live cells
-        rows, cols = np.where(final == 1)
+    def behavior_descriptor(self, final_state: np.ndarray, parameters: Parameters) -> np.ndarray:
+        """
+        Extracts a fixed-length feature vector representing the phenotype of the organism.
+        
+        Features:
+        1. Population Count (normalized)
+        2. Bounding Box Width (normalized)
+        3. Bounding Box Height (normalized)
+        4. Density (Population / Bounding Box Area)
+        """
+        rows, cols = np.where(final_state == 1)
+        
         if len(rows) == 0:
-            return np.zeros((1,), dtype=np.uint8)  # empty pattern
+            return np.array([0.0, 0.0, 0.0, 0.0])
 
+        # Calculate Bounding Box
         rmin, rmax = rows.min(), rows.max()
         cmin, cmax = cols.min(), cols.max()
+        
+        height = rmax - rmin + 1
+        width = cmax - cmin + 1
+        population = len(rows)
+        area = height * width
+        density = population / area if area > 0 else 0
 
-        shape = final[rmin:rmax+1, cmin:cmax+1]  # cropped pattern
-
-        # 2. Generate all 8 isometries (rotations + reflections)
-        transforms = [
-            shape,
-            np.rot90(shape, 1),
-            np.rot90(shape, 2),
-            np.rot90(shape, 3),
-            np.fliplr(shape),
-            np.flipud(shape),
-            np.rot90(np.fliplr(shape), 1),
-            np.rot90(np.flipud(shape), 1),
-        ]
-
-        # 3. Pick the canonical representation (lexicographically smallest)
-        canonical = min(t.flatten().tobytes() for t in transforms)
-
-        # return as numeric vector
-        return np.frombuffer(canonical, dtype=np.uint8)
-
-
-    def _to_index_set(self, arr: np.ndarray) -> set:  
-        a = np.asarray(arr)
-        if a.size == 0:
-            return set()
-        if a.ndim != 1:
-            a = a.ravel()
-        # nonzero returns tuple; take first element
-        nz = np.nonzero(a)[0]
-        return set(map(int, nz))
-
-
-    def _jaccard_set(self, a: set, b: set) -> float:
-        if not a and not b:
-            return 0.0
-        inter = len(a & b)
-        union = len(a | b)
-        if union == 0:
-            return 0.0
-        return 1.0 - (inter / union)
+        # Normalize large values to keep distances balanced
+        # Assuming typical grid sizes, dividing helps keep Euclidean distance meaningful
+        return np.array([
+            population / 100.0,  # Normalize population
+            width / 20.0,        # Normalize width
+            height / 20.0,       # Normalize height
+            density              # Density is already 0-1
+        ])
 
 
     def novelty(self, descriptor: np.ndarray,
             archive: List[np.ndarray],
             population_descriptors: List[np.ndarray],
             k: int = 10) -> float:
-        # Convert primary descriptor -> index set
-        desc_set = self._to_index_set(descriptor)
-
-        # Build pool of sets (population followed by archive)
-        pool_arrays = list(population_descriptors) + list(archive)
-        pool_sets = [self._to_index_set(p) for p in pool_arrays]
-
-        # Compute distances but exclude exactly one self-match (if present).
-        dists = []
-        self_skipped = False
-        for other in pool_sets:
-            if (other == desc_set) and (not self_skipped):
-                # skip the first exact-equal match (treating that as self)
-                self_skipped = True
-                continue
-            d = self._jaccard_set(desc_set, other)
-            dists.append(d)
-
-        if len(dists) == 0:
-            # No neighbors to compare to
+        """
+        Calculates the sparsity of the behavior in the behavior space using k-Nearest Neighbors.
+        
+        Args:
+            descriptor: The behavior vector of the individual being evaluated.
+            archive: List of behavior vectors from the archive.
+            population_descriptors: List of behavior vectors from the current population.
+            k: Number of nearest neighbors to consider.
+            
+        Returns:
+            The average Euclidean distance to the k-nearest neighbors.
+        """
+        # 1. Combine archive and current population for the comparison pool
+        # We filter out the individual's own descriptor if it exists strictly in the list 
+        # (handled by sorting distances, 0 distance usually implies self if strictly equal)
+        pool = np.array(archive + population_descriptors)
+        
+        if len(pool) == 0:
             return 0.0
 
-        # Use up to k nearest neighbors
-        k_eff = min(k, len(dists))
+        # 2. Calculate Euclidean distances from 'descriptor' to everyone in 'pool'
+        # cdist expects 2D arrays, so we reshape descriptor to (1, D)
+        dists = cdist(descriptor.reshape(1, -1), pool, metric='euclidean')[0]
+        
+        # 3. Sort distances
         dists.sort()
-        return float(sum(dists[:k_eff]) / k_eff)
+        
+        # 4. Remove exact duplicate (distance 0) if it is the individual itself
+        # In a generic implementation, we usually skip the first element if it's 0.0 
+        # because that is the distance to itself in the population list.
+        if dists[0] == 0.0 and len(dists) > 1:
+            dists = dists[1:]
+            
+        # 5. Compute average distance to k nearest neighbors
+        k_eff = min(k, len(dists))
+        if k_eff == 0:
+            return 0.0
+            
+        return float(np.mean(dists[:k_eff]))
 
 
     @abstractmethod
@@ -274,7 +270,11 @@ class CGOL_Problem(Problem):
         :param fitness_values: List of fitness values for each individual in the population.
         :return: Index of individual to choose
         """
-        probs = [val / sum(fitness_values) for val in fitness_values]
+        total_fit = sum(fitness_values)
+        if total_fit == 0:
+            return randint(0, len(fitness_values) - 1)
+        
+        probs = [val / total_fit for val in fitness_values]
         indeces = [i for i in range(len(fitness_values))]
         return choices(indeces, weights=probs, k=1)[0]
 
@@ -329,36 +329,28 @@ class GrowthProblem(CGOL_Problem):
         We want to reduce spread of cells as well (one larger clump preferred)
         This is evaluated AFTER the board is simulated
         """
-
-        # get final simulated state
-        # state = CGOL_Problem.simulate(curr_state, parameters)[0]
-
         alive = np.sum(state)
-        # total = state.size
-
-        # if alive == 0:
-        #     return 0.0
-
-        # n = int(np.sqrt(total))
-        # grid = state.reshape((n, n))
-
-        # layer = np.array([
-        #     [1, 1, 1],
-        #     [1, 0, 1],
-        #     [1, 1, 1]
-        # ])
-        # # live neighbors
-        # neighbor_counts = convolve2d(grid, layer, mode='same', boundary='fill', fillvalue=0)
-
-        # # clump_score = avg neighbors normalized to [0, 1]
-        # clump_score = np.sum(neighbor_counts * grid) / (alive * 8)
-
-        # density = alive / total
-        # weighted density by clump
-        #* (0.5 + 0.5 * clump_score)
-        return alive 
+        return float(alive)
 
 
 class MigrationProblem(CGOL_Problem):
-    def value(self, curr_state: np.ndarray) -> float:
-        return 1
+    def value(self, state: np.ndarray, parameters: Parameters) -> float:
+        """
+        Quality Metric: Distance of Center of Mass from Grid Center.
+        Higher (further) is better.
+        """
+        rows, cols = np.where(state == 1)
+        if len(rows) == 0:
+            return 0.0
+            
+        # Calculate Center of Mass
+        avg_r = np.mean(rows)
+        avg_c = np.mean(cols)
+        
+        # Grid Center
+        center_r, center_c = state.shape[0] / 2, state.shape[1] / 2
+        
+        # Euclidean distance from center
+        dist = np.sqrt((avg_r - center_r)**2 + (avg_c - center_c)**2)
+        
+        return float(dist)

@@ -57,7 +57,7 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters, use_cuda: bool 
             break
         best_state = neighbor
 
-    return best_state
+    return best_states
 
 def genetic_algorithm(
     problem: CGOL_Problem, 
@@ -85,8 +85,7 @@ def genetic_algorithm(
     best_states = []
     
     # Determine problem type for fitness evaluation
-    problem_type = "growth" if hasattr(problem, '__class__') and "Growth" in problem.__class__.__name__ else "migration"
-    
+    problem_type = problem.type
     # Initialize population
     population = np.array([problem.state_generator() for _ in range(pop_size)])
     
@@ -148,7 +147,7 @@ def novelty_search_with_quality(
     device = get_device() if use_cuda else torch.device("cpu")
     
     # Determine problem type for fitness evaluation
-    problem_type = "growth" if hasattr(problem, '__class__') and "Growth" in problem.__class__.__name__ else "migration"
+    problem_type = problem.type
     
     # Initialize population
     population = np.array([problem.state_generator() for _ in range(pop_size)])
@@ -170,6 +169,21 @@ def novelty_search_with_quality(
     novelties = novelty_batch(descriptors, archive, k, device).tolist()
     
     # Initial archive update
+
+    final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
+
+    # initial eval
+    descriptors = [problem.behavior_descriptor(ind, new_params)
+                   for ind in final_states]
+    novelties = [
+        problem.novelty(desc, archive, descriptors, k)
+        for desc in descriptors
+    ]
+    qualities = [problem.value(ind, new_params) for ind in final_states]
+
+    best_states = [population[np.argmax(qualities)]]
+
+    # initial archive update
     for desc, n, q in zip(descriptors, novelties, qualities):
         if n >= novelty_threshold and q >= quality_threshold:
             archive.append(desc)
@@ -192,24 +206,25 @@ def novelty_search_with_quality(
             if np.random.rand() < 0.5:
                 child = problem.mutate(child)
             offspring.append(child)
+
+        final_offs = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in offspring]
+        # eval offspring
+        offspring_desc = [problem.behavior_descriptor(ind, new_params)
+                            for ind in final_offs]
+
+        offspring_novel = [
+            problem.novelty(desc, archive, offspring_desc, k)
+            for desc in offspring_desc
+        ]
         
-        offspring = np.array(offspring)
-        
-        # Batch simulate offspring
-        offspring_tensor = torch.from_numpy(offspring).to(device)
-        final_offs = simulate_batch(offspring_tensor, new_params, device)
-        
-        # Batch compute fitness
-        offspring_quality_tensor = value_batch(final_offs, problem_type)
-        offspring_quality = offspring_quality_tensor.cpu().numpy().tolist()
-        
-        # Compute descriptors
-        final_offs_np = final_offs.cpu().numpy()
-        offspring_desc = [problem.behavior_descriptor(state, new_params) for state in final_offs_np]
-        
-        # Compute novelties
-        offspring_novel = novelty_batch(offspring_desc, archive, k, device).tolist()
-        
+
+        offspring_quality = [
+            problem.value(ind, new_params) for ind in final_offs
+        ]
+
+        best_states.append(offspring[np.argmax(offspring_quality)])
+
+        # ----------------------------
         # Archive update
         for desc, n, q in zip(offspring_desc, offspring_novel, offspring_quality):
             if n >= novelty_threshold and q >= quality_threshold:
@@ -238,5 +253,6 @@ def novelty_search_with_quality(
         descriptors = [full_desc[i] for i in best_idx]
         novelties = [full_nov[i] for i in best_idx]
         qualities = [full_qual[i] for i in best_idx]
-    
-    return population.tolist()
+
+    # return 
+    return best_states

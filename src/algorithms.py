@@ -4,7 +4,7 @@ import copy
 
 # from concurrent.futures import ProcessPoolExecutor
 
-def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> np.ndarray:
+def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
     """
     Hill Climbing Search.
 
@@ -19,17 +19,22 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> np.ndarray:
     new_params = copy.deepcopy(parameters)
     new_params.include_between = False
 
-    best_state = problem.initial_state
+    length = int(np.sqrt(len(problem.initial_state)))
+    best_state = problem.initial_state.reshape((length, length))
+    best_states = []
     while True:
-        neighbors = [problem.result(best_state, n) for n in problem.actions(best_state)]
+        best_states.append(best_state.flatten())
+        neighbors = [problem.result(best_state.flatten(), n) for n in problem.actions(best_state.flatten())]
         final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in neighbors]
-        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in final_states])]      # get max valued neighbor
+        # get max valued neighbor
+        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in final_states])].reshape((length,length))
 
         if problem.value(neighbor, new_params) <= problem.value(best_state, new_params):
+            best_states.append(best_state.flatten())
             break
         best_state = neighbor
 
-    return best_state
+    return best_states
 
 def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:int = 100, num_epochs:int = 100) -> list[np.ndarray]:
     """
@@ -48,7 +53,7 @@ def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:in
     mutation_prob = 0.5
     best_states = []
 
-    population = [problem.state_generator() for _ in range(pop_size)]
+    population = [problem.state_generator(problem.type) for _ in range(pop_size)]
     # solved = False
     epoch = 0
     while epoch < num_epochs:
@@ -90,7 +95,7 @@ def novelty_search_with_quality(problem:CGOL_Problem,
     new_params = copy.deepcopy(parameters)
     new_params.include_between = False
 
-    population = [problem.state_generator() for _ in range(pop_size)]
+    population = [problem.state_generator(problem.type) for _ in range(pop_size)]
     archive = []
 
     final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
@@ -103,6 +108,8 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         for desc in descriptors
     ]
     qualities = [problem.value(ind, new_params) for ind in final_states]
+
+    best_states = [population[np.argmax(qualities)]]
 
     # initial archive update
     for desc, n, q in zip(descriptors, novelties, qualities):
@@ -146,6 +153,8 @@ def novelty_search_with_quality(problem:CGOL_Problem,
             problem.value(ind, new_params) for ind in final_offs
         ]
 
+        best_states.append(offspring[np.argmax(offspring_quality)])
+
         # ----------------------------
         # Archive update
         # ----------------------------
@@ -186,4 +195,5 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         novelties = [full_nov[i] for i in best_idx]
         qualities = [full_qual[i] for i in best_idx]
 
-    return population
+    # return 
+    return best_states

@@ -35,7 +35,7 @@ def main():
         initial = hill_climbing(
             problem=problem,
             parameters=PARS,
-        )
+        )[-1]
         hc_log = CGOL_Problem.simulate(initial=initial, parameters=PARS)[-1]
         hc_results.append(np.sum(hc_log))
 

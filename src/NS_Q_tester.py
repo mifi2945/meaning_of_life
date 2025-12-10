@@ -13,7 +13,7 @@ PARS = Parameters(
         expansion=-1
     )
 
-def main():
+def growth_over_runs():
     d_results = []
     hc_results = []
     ga_results = []
@@ -65,7 +65,7 @@ def main():
     plt.plot(ga_results, label="GA", marker="o")
     plt.plot(nsq_results, label="NS-Q", marker="o")
 
-    plt.title("Final Live Cells After 100 Steps (20 Runs)")
+    plt.title("Final Live Cells After 100 Steps")
     plt.xlabel("Run (sorted)")
     plt.ylabel("Final Live Cell Count")
     plt.grid(True)
@@ -112,8 +112,8 @@ def migration():
     plt.plot(ga_results, label="GA", marker="o")
     plt.plot(nsq_results, label="NS-Q", marker="o")
 
-    plt.title(f"Quality over Steps")
-    plt.xlabel("Step")
+    plt.title(f"Migration Quality over Epochs")
+    plt.xlabel("Epoch")
     plt.ylabel("Quality")
     plt.grid(True)
     plt.legend()
@@ -124,11 +124,50 @@ def migration():
     plt.close()
 
     print(f"\nPlot saved to {out_path}")
-    # print(f"""Avg Direct: {np.mean(d_results):.2f}, 
-    #       Avg Hillclimbing: {np.mean(hc_results):.2f}, 
-    #       Avg GA: {np.mean(ga_results):.2f}, 
-    #       Avg NS-Q: {np.mean(nsq_results):.2f}""")
+
+def growth_over_epochs():
+    problem = GrowthProblem(state_generator=create_initial_state, type="random")
+    hc_states = hill_climbing(
+            problem=problem,
+            parameters=PARS,
+        )
+    hc_results = [problem.value(CGOL_Problem.simulate(s, PARS)[-1], PARS) for s in hc_states]
+
+    ga_states = genetic_algorithm(
+            problem=problem,
+            parameters=PARS,
+        )
+    ga_results = [problem.value(CGOL_Problem.simulate(s, PARS)[-1], PARS) for s in ga_states]
+
+    nsq_states = novelty_search_with_quality(
+            problem=problem,
+            parameters=PARS,
+            quality_threshold=200
+        )
+    nsq_results = [problem.value(CGOL_Problem.simulate(s, PARS)[-1], PARS) for s in nsq_states]
+    
+    # # plot and save based on sorted final living cell count...
+    os.makedirs("growth_plots", exist_ok=True)
+
+    plt.figure(figsize=(10,6))
+    plt.plot(hc_results, label="HC", marker="o")
+    plt.plot(ga_results, label="GA", marker="o")
+    plt.plot(nsq_results, label="NS-Q", marker="o")
+
+    plt.title(f"Growth Quality over Epochs")
+    plt.xlabel("Epoch")
+    plt.ylabel("Quality")
+    plt.grid(True)
+    plt.legend()
+
+    out_path = f"growth_plots/all.png"
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+    print(f"\nPlot saved to {out_path}")
 
 if __name__ == "__main__":
-    main()
-    # migration()
+    growth_over_runs()
+    growth_over_epochs()
+    migration()

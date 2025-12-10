@@ -1,8 +1,10 @@
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem, Parameters
 from algorithms import novelty_search_with_quality, hill_climbing, genetic_algorithm
 from main import create_initial_state
+from pytorch_parallel import simulate_batch
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 import os
 
 RUNS = 3
@@ -21,8 +23,12 @@ def main():
         print(f"Run {i+1}/{RUNS}")
         problem = GrowthProblem(state_generator=create_initial_state)
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         # random
-        d_log = CGOL_Problem.simulate(initial=create_initial_state(), parameters=PARS)[-1]
+        random_initial = create_initial_state()
+        random_tensor = torch.from_numpy(random_initial.reshape(1, -1)).to(device)
+        d_log = simulate_batch(random_tensor, PARS, device)[0].cpu().numpy()
         d_results.append(np.sum(d_log))
 
         # Hillclimbing
@@ -37,16 +43,26 @@ def main():
         initial = genetic_algorithm(
             problem=problem,
             parameters=PARS,
+            use_cuda=True,
         )[-1]
-        ga_log = CGOL_Problem.simulate(initial=initial, parameters=PARS)[-1]
+        # Ensure initial is a numpy array
+        if isinstance(initial, list):
+            initial = np.array(initial, dtype=np.uint8)
+        ga_tensor = torch.from_numpy(initial.reshape(1, -1)).to(device)
+        ga_log = simulate_batch(ga_tensor, PARS, device)[0].cpu().numpy()
         ga_results.append(np.sum(ga_log))
 
         # NS-Q
         initial = novelty_search_with_quality(
             problem=problem,
             parameters=PARS,
+            use_cuda=True,
         )[-1]
-        nsq_log = CGOL_Problem.simulate(initial=initial, parameters=PARS)[-1]
+        # Ensure initial is a numpy array
+        if isinstance(initial, list):
+            initial = np.array(initial, dtype=np.uint8)
+        nsq_tensor = torch.from_numpy(initial.reshape(1, -1)).to(device)
+        nsq_log = simulate_batch(nsq_tensor, PARS, device)[0].cpu().numpy()
         nsq_results.append(np.sum(nsq_log))
     
     # plot and save based on sorted final living cell count...

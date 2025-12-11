@@ -8,7 +8,7 @@ from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
 from visualizer import DELAY, GRID_WIDTH
 
 
-def create_initial_state(type:str = 'empty', size:int = 400) -> np.ndarray:
+def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
 
     death = np.array([
         0, 0, 0,
@@ -94,8 +94,8 @@ def main():
         type=str,
         default="default",
         choices=["default", "hill_climbing", "GA", "NS_Q"],
-        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm, " \
-        "'NS_Q' for Novelty Search"
+        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing, 'GA' for Genetic Algorithm, " \
+        "'NS_Q' for Novelty Search (default: default)"
     )
     
     parser.add_argument(
@@ -117,8 +117,8 @@ def main():
     parser.add_argument(
         "--grid-size",
         type=int,
-        default=20,
-        help="Initial grid size (NxN). Default: 20 (20x20 = 400 cells)"
+        default=10,
+        help="Initial grid size (NxN). Default: 10 (10x10 = 100 cells)"
     )
     
     parser.add_argument(

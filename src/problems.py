@@ -289,7 +289,7 @@ class CGOL_Problem(Problem):
     def novelty(self, descriptor: np.ndarray,
             archive: List[np.ndarray],
             population_descriptors: List[np.ndarray],
-            k: int = 10) -> float:
+            k: int = 5) -> float:
         """
         Calculates the novelty using KNN Euclidean metric
         

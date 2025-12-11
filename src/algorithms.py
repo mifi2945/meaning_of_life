@@ -138,7 +138,7 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         probs /= probs.sum()
 
         # Select parents (not including the elite in the selection pool)
-        indices = np.random.choice(len(population), size=pop_size - 1, p=probs)
+        indices = np.random.choice(len(population), size=pop_size - 1, p=probs, replace=True)
         parents_for_offspring = [population[i] for i in indices]
 
 

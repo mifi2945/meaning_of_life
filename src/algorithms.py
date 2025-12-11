@@ -2,13 +2,14 @@ from problems import CGOL_Problem, Parameters
 import numpy as np
 import copy
 
-# from concurrent.futures import ProcessPoolExecutor
 
 def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
     """
     Hill Climbing Search.
 
-    :param problem: Local Search Problem Object.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+
     :return: Returns a list of the best states (as evaluated using value()) at each epoch.
 
     *notes:
@@ -38,12 +39,14 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
 
 def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:int = 100, num_epochs:int = 100) -> list[np.ndarray]:
     """
-    Implements a Genetic Algorithm.
+    Implements Genetic Algorithm with Elitism
 
-    :param problem: CGOL_Problem Object.
-    :param pop_size: Size of the population.
-    :param num_epochs: Number of epochs.
-    :return: The best state from the population at each epoch.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+    :param pop_size: Size of each population
+    :param num_epochs: Number of epochs to grow through
+
+    :return: List of best states from the population at each epoch
     """
 
     # don't need between steps... for now
@@ -90,8 +93,17 @@ def novelty_search_with_quality(problem:CGOL_Problem,
     """
     NS-Q: Novelty Search with Quality (elitism implemented).
 
-    This algorithm uses a weighted combination of Novelty and Quality (Fitness)
-    for selection and population replacement.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+    :param pop_size: Size of each population
+    :param num_epochs: Number of epochs to grow through
+    :param k: K used for KNN for novelty calculation
+    :param novelty_threshold: The novelty threshold that an individual has to surpass to be added as fit
+    :param quality_threshold: The quality threshold that an individual has to surpass to be added as fit
+    :archive_max: The max size of the archive
+    :novelty_weight: The weight novelty is assigned in the combined score (the inverse scored is true for quality)
+
+    :return: List of best states from the population at each epoch
     """
 
     new_params = copy.deepcopy(parameters)

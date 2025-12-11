@@ -14,6 +14,11 @@ PARS = Parameters(
     )
 
 def growth_over_runs():
+    """
+    Generates plots for results of Growth Problem over RUNS number of runs
+
+    Saves plot to 'plots/all.png'
+    """
     d_results = []
     hc_results = []
     ga_results = []
@@ -84,6 +89,11 @@ def growth_over_runs():
 
  
 def migration():
+    """
+    Generates plots for results of Migration Problem for one run over epochs
+
+    Saves plot to 'migration_plots/all.png'
+    """
     problem = MigrationProblem(state_generator=create_initial_state, type="random")
     hc_states = hill_climbing(
             problem=problem,
@@ -126,6 +136,11 @@ def migration():
     print(f"\nPlot saved to {out_path}")
 
 def growth_over_epochs():
+    """
+    Generates plots for results of Growth Problem for one run over epochs
+
+    Saves plot to 'growth_plots/all.png'
+    """
     problem = GrowthProblem(state_generator=create_initial_state, type="random")
     hc_states = hill_climbing(
             problem=problem,

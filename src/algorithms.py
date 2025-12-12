@@ -2,13 +2,14 @@ from problems import CGOL_Problem, Parameters
 import numpy as np
 import copy
 
-# from concurrent.futures import ProcessPoolExecutor
 
 def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndarray]:
     """
     Hill Climbing Search.
 
-    :param problem: Local Search Problem Object.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+
     :return: Returns a list of the best states (as evaluated using value()) at each epoch.
 
     *notes:
@@ -27,9 +28,9 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
         neighbors = [problem.result(best_state.flatten(), n) for n in problem.actions(best_state.flatten())]
         final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in neighbors]
         # get max valued neighbor
-        neighbor = neighbors[np.argmax([problem.value(n, new_params) for n in final_states])].reshape((length,length))
+        neighbor = neighbors[np.argmax([problem.value(n) for n in final_states])].reshape((length,length))
 
-        if problem.value(neighbor, new_params) <= problem.value(best_state, new_params):
+        if problem.value(neighbor) <= problem.value(best_state):
             best_states.append(best_state.flatten())
             break
         best_state = neighbor
@@ -38,12 +39,14 @@ def hill_climbing(problem: CGOL_Problem, parameters: Parameters) -> list[np.ndar
 
 def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:int = 100, num_epochs:int = 100) -> list[np.ndarray]:
     """
-    Implements a Genetic Algorithm.
+    Implements Genetic Algorithm with Elitism
 
-    :param problem: CGOL_Problem Object.
-    :param pop_size: Size of the population.
-    :param num_epochs: Number of epochs.
-    :return: The best state from the population at each epoch.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+    :param pop_size: Size of each population
+    :param num_epochs: Number of epochs to grow through
+
+    :return: List of best states from the population at each epoch
     """
 
     # don't need between steps... for now
@@ -59,7 +62,7 @@ def genetic_algorithm(problem: CGOL_Problem, parameters: Parameters, pop_size:in
     while epoch < num_epochs:
         epoch += 1
         final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
-        weights = [problem.value(state, new_params) for state in final_states]
+        weights = [problem.value(state) for state in final_states]
         # weights = eval_batch(problem, new_params, population)
 
         elite_index = np.argmax(weights)
@@ -90,8 +93,17 @@ def novelty_search_with_quality(problem:CGOL_Problem,
     """
     NS-Q: Novelty Search with Quality (elitism implemented).
 
-    This algorithm uses a weighted combination of Novelty and Quality (Fitness)
-    for selection and population replacement.
+    :param problem: Local Search Problem Object for CGoL
+    :param parameters: Simulation parameters for CGoL
+    :param pop_size: Size of each population
+    :param num_epochs: Number of epochs to grow through
+    :param k: K used for KNN for novelty calculation
+    :param novelty_threshold: The novelty threshold that an individual has to surpass to be added as fit
+    :param quality_threshold: The quality threshold that an individual has to surpass to be added as fit
+    :archive_max: The max size of the archive
+    :novelty_weight: The weight novelty is assigned in the combined score (the inverse scored is true for quality)
+
+    :return: List of best states from the population at each epoch
     """
 
     new_params = copy.deepcopy(parameters)
@@ -104,13 +116,13 @@ def novelty_search_with_quality(problem:CGOL_Problem,
     # --- Initial Evaluation ---
     final_states = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in population]
 
-    descriptors = [problem.behavior_descriptor(ind, new_params)
+    descriptors = [problem.behavior_descriptor(ind)
                    for ind in final_states]
     novelties = [
         problem.novelty(desc, archive, descriptors, k)
         for desc in descriptors
     ]
-    qualities = [problem.value(ind, new_params) for ind in final_states]
+    qualities = [problem.value(ind) for ind in final_states]
 
     # Calculate combined scores for initial population
     combined_scores = novelty_weight * np.array(novelties) + \
@@ -161,7 +173,7 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         # ----------------------------
         final_offs = [CGOL_Problem.simulate(ind, new_params)[-1] for ind in offspring]
         
-        offspring_desc = [problem.behavior_descriptor(ind, new_params)
+        offspring_desc = [problem.behavior_descriptor(ind)
                             for ind in final_offs]
         
         # Calculate offspring novelty (Archive is updated AFTER this calculation)
@@ -171,7 +183,7 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         ]
         
         offspring_quality = [
-            problem.value(ind, new_params) for ind in final_offs
+            problem.value(ind) for ind in final_offs
         ]
 
         # ----------------------------

@@ -94,8 +94,8 @@ def main():
         type=str,
         default="default",
         choices=["default", "hill_climbing", "GA", "NS_Q"],
-        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing (default: default), 'GA' for Genetic Algorithm, " \
-        "'NS_Q' for Novelty Search"
+        help="Search algorithm type: 'default' for direct simulation, 'hill_climbing' for hill climbing, 'GA' for Genetic Algorithm, " \
+        "'NS_Q' for Novelty Search (default: default)"
     )
     
     parser.add_argument(
@@ -195,7 +195,7 @@ def main():
     print(f"Final state: {log[-1].shape[0]}x{log[-1].shape[1]} grid")
     
     # Print problem-specific value
-    final_value = problem.value(log[-1], parameters)
+    final_value = problem.value(log[-1])
     if args.problem_type == "growth":
         print(f"Final value (alive cells): {final_value:.1f}")
     elif args.problem_type == "migration":

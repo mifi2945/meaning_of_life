@@ -253,13 +253,20 @@ class CGOL_Problem(Problem):
         
         return next_state_2d.flatten()
     
-    def behavior_descriptor(self, final_state: np.ndarray, parameters: Parameters) -> np.ndarray:
+    def behavior_descriptor(self, final_state: np.ndarray) -> np.ndarray:
         """
+        Calculates descriptor vector for the passed in final_state
         Features:
         1. Population Count (normalized)
         2. Bounding Box Width (normalized)
         3. Bounding Box Height (normalized)
         4. Density (Population / Bounding Box Area)
+
+        Args:
+            final_state: state of the board after simulation is run
+
+        Returns: The behavior descriptor vector for the passed in state
+        
         """
         rows, cols = np.where(final_state == 1)
         
@@ -289,18 +296,18 @@ class CGOL_Problem(Problem):
     def novelty(self, descriptor: np.ndarray,
             archive: List[np.ndarray],
             population_descriptors: List[np.ndarray],
-            k: int = 10) -> float:
+            k: int = 5) -> float:
         """
         Calculates the novelty using KNN Euclidean metric
         
         Args:
-            descriptor: The behavior vector of the individual being evaluated.
-            archive: List of behavior vectors from the archive.
-            population_descriptors: List of behavior vectors from the current population.
-            k: Number of nearest neighbors to consider.
+            descriptor: The behavior vector of the individual being evaluated
+            archive: List of behavior vectors from the archive
+            population_descriptors: List of behavior vectors from the current population
+            k: Number of nearest neighbors to consider
             
         Returns:
-            The average Euclidean distance to the k-nearest neighbors.
+            The average Euclidean distance to the k-nearest neighbors
         """
         pool = np.array(archive + population_descriptors)
         
@@ -421,19 +428,32 @@ class CGOL_Problem(Problem):
 
 
 class GrowthProblem(CGOL_Problem):
-    def value(self, state: np.ndarray, parameters: Parameters) -> float:
+    def value(self, state: np.ndarray) -> float:
         """
-        Sum of all alive cells on the grid
+        Quality function for GrowthProblem
+        Higher (more cells) is better
+
+        Args:
+            state: the final state of the board after simulation is run
+        
+        Returns: sum of all alive cells on given state board
+
         """
         alive = np.sum(state)
         return float(alive)
 
 
 class MigrationProblem(CGOL_Problem):
-    def value(self, state: np.ndarray, parameters: Parameters) -> float:
+    def value(self, state: np.ndarray) -> float:
         """
-        Quality Metric: Distance of Center of Mass from Grid Center.
-        Higher (further) is better.
+        Quality function for MigrationProblem
+        Higher (further) is better
+
+        Args:
+            state: the final state of the board after simulation is run
+        
+        Returns: Euclidean distance of center of mass of cells from center of board
+
         """
         if len(state.shape) < 2:
             length = int(np.sqrt(len(state)))

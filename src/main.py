@@ -8,7 +8,7 @@ from problems import STEPS, INCLUDE_BETWEEN, EXPANSION
 from visualizer import DELAY, GRID_WIDTH
 
 
-def create_initial_state(type:str = 'empty', size:int = 400) -> np.ndarray:
+def create_initial_state(type:str = 'empty', size:int = 100) -> np.ndarray:
 
     death = np.array([
         0, 0, 0,
@@ -38,7 +38,7 @@ def create_initial_state(type:str = 'empty', size:int = 400) -> np.ndarray:
     ], dtype=np.uint8)
     
     # Create random grid with 31% probability of being alive
-    rando = (np.random.rand(size) < 0.51).astype(np.uint8)
+    rando = (np.random.rand(size) < 0.5).astype(np.uint8)
     empty = np.zeros(size, dtype=np.uint8)
 
     if type == 'empty':
@@ -86,7 +86,7 @@ def main():
         "--grid-width",
         type=int,
         default=GRID_WIDTH,
-        help="Display grid width (default: 100)"
+        help="Number of cells to display in visualization (default: 100). Larger values show more detail but smaller cells."
     )
     
     parser.add_argument(
@@ -117,8 +117,8 @@ def main():
     parser.add_argument(
         "--grid-size",
         type=int,
-        default=20,
-        help="Initial grid size (NxN). Default: 20 (20x20 = 400 cells)"
+        default=10,
+        help="Initial grid size (NxN). Default: 10 (10x10 = 100 cells)"
     )
     
     parser.add_argument(

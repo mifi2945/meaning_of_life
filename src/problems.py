@@ -75,13 +75,13 @@ class CGOL_Problem(Problem):
         0, 0, 0, 0
     ], dtype=np.uint8)
 
-    SUSTAIN_1 = np.array([
-        0, 1, 0,
+    SUSTAIN = np.array([
+        1, 1, 0,
         1, 0, 1,
-        0, 1, 0
+        0, 1, 1
     ], dtype=np.uint8)
     
-    SUSTAIN_2 = np.array([
+    BEEHIVE = np.array([
         0, 1, 0,
         1, 0, 1,
         1, 0, 1,
@@ -99,8 +99,8 @@ class CGOL_Problem(Problem):
                 'blinker': (self.BLINKER, 3, 3),      # 3x3
                 'glider': (self.GLIDER, 5, 5),        # 5x5
                 'toad': (self.TOAD, 4, 4),            # 4x4
-                'sustain_1': (self.SUSTAIN_1, 3, 3),  # 3x3
-                'sustain_2': (self.SUSTAIN_2, 4, 3)   # 4x3 (rectangular)
+                'sustain_1': (self.SUSTAIN, 3, 3),  # 3x3
+                'sustain_2': (self.BEEHIVE, 4, 3)   # 4x3 (rectangular)
             }
         else:
             self.patterns = {}
@@ -452,5 +452,4 @@ class MigrationProblem(CGOL_Problem):
         
         # distance from center
         dist = np.sqrt((avg_r - center_r)**2 + (avg_c - center_c)**2)
-        
         return float(dist)

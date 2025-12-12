@@ -36,7 +36,9 @@ class GameVisualizer:
                 return (r, g, b)
     
     def _fit_to_grid(self, width: int):        
-        self.grid_width = min(width, GRID_WIDTH)
+        # Use the provided grid_width if set, otherwise fit to actual grid size (capped at GRID_WIDTH for performance)
+        if self.grid_width is None:
+            self.grid_width = min(width, GRID_WIDTH)
         self.cell_width = GRID_SIZE_PIXELS // self.grid_width
     
     def display_grid(self, grid: np.ndarray, center_row: int = None, center_col: int = None):

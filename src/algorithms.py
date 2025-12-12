@@ -138,16 +138,16 @@ def novelty_search_with_quality(problem:CGOL_Problem,
         probs /= probs.sum()
 
         # Select parents (not including the elite in the selection pool)
-        indices = np.random.choice(len(population), size=pop_size - 1, p=probs)
+        indices = np.random.choice(len(population), size=pop_size - 1, p=probs, replace=True)
         parents_for_offspring = [population[i] for i in indices]
-
+        
 
         # ----------------------------
         # Offspring Generation
         # ----------------------------
         offspring = []
         for _ in range(pop_size - 1): # Generate pop_size-1 offspring
-            # Select parents from the selected pool (can be the same individual)
+            # Select parents from the selected pool with weighted probabilities
             i1, i2 = np.random.choice(len(parents_for_offspring), 2, replace=True)
             p1, p2 = parents_for_offspring[i1], parents_for_offspring[i2]
             

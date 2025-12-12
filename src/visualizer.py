@@ -84,7 +84,7 @@ class GameVisualizer:
             self.grid_width = min(width, GRID_WIDTH)
         self.cell_width = GRID_SIZE_PIXELS // self.grid_width
     
-    def display_grid(self, grid: np.ndarray, center_row: int = None, center_col: int = None):
+    def display_grid(self, grid: np.ndarray):
         """
         Display a single grid state on the PyGame window.
         

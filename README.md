@@ -19,7 +19,7 @@ CGoL is Turing Complete, meaning the game itself is like a programming language 
     - `main.py` ............-> main thread to start search and program, utilizing the CLI for options
     - `NS_Q_tester.py` ............-> evaluation tester used to generate 3 graphs for evaluation of NS-Q
     - `problems.py` ............-> `CGoL` environment/simulation logic and implemenations of `Problem` classes for `Growth` and `Migration`
-    - `visualizer.py` ............-> `TODO`
+    - `visualizer.py` ............-> Given a log of sequential states from the `simulate` method, uses pygame to show the game
 
 ### Program:
 The program utilizes the `uv` package to sync all required packages:

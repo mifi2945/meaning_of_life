@@ -1,3 +1,13 @@
+"""
+Conway's Game of Life Problem Formulations
+
+This module defines the problem space for Conway's Game of Life, including:
+- CGOL_Problem: Base class implementing CGoL simulation, actions, and genetic operators
+- GrowthProblem: Maximizes final population count (alive cells)
+- MigrationProblem: Maximizes distance traveled from the center of the grid, using Euclidean Distance
+- Parameters: Configuration class for simulation settings (steps, expansion, etc.)
+"""
+
 from __future__ import annotations  # needed in order to reference a Class within itself
 from random import randint, random, choice, choices
 from selectors import SelectorKey
@@ -156,7 +166,6 @@ class CGOL_Problem(Problem):
             living = np.where(region_to_scan == 1)
             
             if len(living[0]) == 0:
-                # TODO need to move this print somewhere else cuz otherwise it prints too much
                 # print("Everyone died and your model is bad :(")
                 break
             

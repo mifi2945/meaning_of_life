@@ -1,3 +1,12 @@
+"""
+Search Algorithms for CGoL
+
+This module implements three search algorithms for optimizing Conway's Game of Life states:
+- Hill Climbing: Local search that moves to the best neighbor at each step
+- Genetic Algorithm: Population-based evolutionary algorithm with selection, crossover, and mutation
+- Novelty Search with Quality: Combines novelty and quality metrics to explore diverse solutions
+"""
+
 from problems import CGOL_Problem, Parameters
 import numpy as np
 import copy

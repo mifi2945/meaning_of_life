@@ -1,3 +1,13 @@
+"""
+Evaluation and Testing Script for Search Algorithms
+
+Generates comparative plots evaluating algorithm performance:
+- growth_over_runs(): Compares algorithms across multiple runs (sorted results)
+- growth_over_epochs(): Tracks quality improvement over epochs for Growth problem
+- migration(): Tracks quality improvement over epochs for Migration problem
+Saves plots to growth_plots/, migration_plots/, and plots/ directories.
+"""
+
 from problems import CGOL_Problem, GrowthProblem, MigrationProblem, Parameters
 from algorithms import novelty_search_with_quality, hill_climbing, genetic_algorithm
 from main import create_initial_state

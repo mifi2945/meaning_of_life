@@ -1,3 +1,22 @@
+"""
+Entry Point
+
+Command-line interface for running search algorithms on Conway's Game of Life problems.
+Supports multiple search algorithms (Hill Climbing, Genetic Algorithm, NS-Q) and problem
+types (Growth, Migration). Handles argument parsing, algorithm execution, and visualization.
+
+Command-line Arguments:
+    -s, --steps <STEPS>                Number of simulation steps (default: 100)
+    -v, --visualize                    Visualize the simulation? (default: False)
+    -d, --delay <DELAY>                Delay between frames for visualization in milliseconds (default: 100)
+    --grid-width <GRID_WIDTH>          Display grid width if you are visualizing
+    -a, --search-type                  Search algorithm type; 'default' for random initial state, takes: {default,hill_climbing,GA,NS_Q} 
+    -p, --problem-type                 Problem type to solve; 'growth' for growth problem, 'migration' for migration problem (default: growth)
+    -i, --initial-state {random,empty} Initial state generation method; 'random' for random start, 'empty' for empty initial state
+    --grid-size <GRID_SIZE>            Initial grid size (NxN). Default: 10 (10x10 = 100 cells)
+    --no-presets                       Disable pattern presets (only use single bit flips). By default, presets are enabled.
+"""
+
 import argparse
 import numpy as np
 from visualizer import GameVisualizer

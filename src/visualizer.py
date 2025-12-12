@@ -1,3 +1,11 @@
+"""
+Conway's Game of Life Visualization
+
+PyGame-based visualizer for displaying Conway's Game of Life simulations.
+Supports interactive playback with keyboard controls (space to play/pause, arrow keys to navigate).
+Visualizer defaults to paused and you must press space to start the animation.
+"""
+
 import pygame
 import numpy as np
 from typing import List
@@ -8,7 +16,24 @@ GRID_SIZE_PIXELS = 1000
 GRID_WIDTH = 100
 
 class GameVisualizer:
+    """
+    PyGame-based visualizer for Conway's Game of Life simulations.
+    
+    Uses PyGame to show the game
+    """
+    
     def __init__(self, grid_width: int = None, delay: int = DELAY, auto_fit: bool = True):
+        """
+        Initialize the GameVisualizer with display settings.
+        
+        Args:
+            grid_width: Number of cells to display horizontally/vertically. If None,
+                       will be auto-fitted based on the first grid displayed (capped at GRID_WIDTH).
+            delay: Delay in milliseconds between frames during auto-playback (default: 100).
+            auto_fit: Whether to automatically fit grid size to display window (default: True).
+        
+        Initializes PyGame, creates a display window, and sets up colors for visualization.
+        """
         pygame.init()
         self.clock = pygame.time.Clock()
         
@@ -18,7 +43,6 @@ class GameVisualizer:
         self.win = pygame.display.set_mode([GRID_SIZE_PIXELS, GRID_SIZE_PIXELS])
         self.cell_width = GRID_SIZE_PIXELS // grid_width
         
-
         self.ALIVE_COLOR = pygame.Color(*self._random_contrasty_color())
         self.DEAD_COLOR = pygame.Color("white")
         self.GRID_COLOR = pygame.Color("gray")
@@ -27,6 +51,15 @@ class GameVisualizer:
         pygame.display.set_caption("Conway's Game of Life")
 
     def _random_contrasty_color(self):
+        """
+        AI-generated random color generator for the living cells, for the spunk.
+        
+        Uses luminance calculation to ensure the color is dark enough to be visible
+        on a white background. Continues generating colors until one with luminance < 220 is found.
+        
+        Returns:
+            tuple: RGB color tuple (r, g, b) with values 0-255, guaranteed to be visible on white.
+        """
         while True:
             r = random.randint(0, 255)
             g = random.randint(0, 255)
@@ -35,13 +68,31 @@ class GameVisualizer:
             if luminance < 220:
                 return (r, g, b)
     
-    def _fit_to_grid(self, width: int):        
+    def _fit_to_grid(self, width: int):
+        """
+        Adjust display settings to fit the given grid width.
+        
+        If grid_width was not specified during initialization, this method sets it
+        based on the actual grid size
+        Recalculates cell_width to ensure proper scaling.
+        
+        Args:
+            width: The width (and height, assuming square grid) of the grid to display.
+        """
         # Use the provided grid_width if set, otherwise fit to actual grid size (capped at GRID_WIDTH for performance)
         if self.grid_width is None:
             self.grid_width = min(width, GRID_WIDTH)
         self.cell_width = GRID_SIZE_PIXELS // self.grid_width
     
     def display_grid(self, grid: np.ndarray, center_row: int = None, center_col: int = None):
+        """
+        Display a single grid state on the PyGame window.
+        
+        Called for every step of the simulation.
+        
+        Args:
+            grid: 2D numpy array representing the game state (1 = alive, 0 = dead).
+        """
         self.win.fill(self.DEAD_COLOR)
         
         start_row = 0
@@ -85,6 +136,24 @@ class GameVisualizer:
             )
     
     def display_sequence(self, grids: List[np.ndarray], auto_advance: bool = False):
+        """
+        Display a sequence of grid states with interactive controls.
+        
+        Shows each grid state in sequence, allowing the user to control playback.
+        The visualization starts paused by default; press SPACE to start auto-playback.
+        
+        Keyboard Controls:
+            SPACE: Toggle auto-advance (play/pause animation)
+            RIGHT ARROW: Advance to next frame manually
+            LEFT ARROW: Go back to previous frame manually
+            Q or ESC: Quit the visualization
+        
+        Args:
+            grids: List of 2D numpy arrays, each representing a game state at a different time step.
+            auto_advance: Whether to automatically advance frames (default: False, starts paused).
+        
+        The method runs until the user quits or all frames have been displayed.
+        """
         self._fit_to_grid(grids[0].shape[0])
         
         running = True
@@ -117,6 +186,12 @@ class GameVisualizer:
                 pygame.time.delay(self.delay)
     
     def update_display(self):
+        """
+        Update the PyGame display window.
+        
+        Flips the display buffer to show the current frame and updates the clock.
+        Should be called after drawing operations to make changes visible.
+        """
         pygame.display.flip()
         self.clock.tick()
     
